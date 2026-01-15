@@ -1,0 +1,553 @@
+ruleset io.picolabs.neighborhood_temps {
+  meta {
+    shares __testing, retrieve_temperature_logs, generateSeen, getCount,others_seen, getLastMessage, is_enabled, current_heartbeat_interval, get_report, myself, averages_of_report
+    use module io.picolabs.wrangler alias wrangler
+    use module io.picolabs.subscription alias subscription
+  }
+  global {
+    __testing = { "queries": [
+                  { "name": "__testing" },
+                  {"name":"retrieve_temperature_logs"},
+                  {"name":"generateSeen"},
+                  {"name":"others_seen"},
+                  {"name":"is_enabled"},
+                  {"name":"current_heartbeat_interval"},
+                  {"name":"getLastMessage"},
+                  {"name":"get_report"},
+                  {"name":"getCount"},
+                  {"name":"averages_of_report"}
+//                  {"name":"myself"}
+                  ],
+                  "events": [
+                    {
+                      "domain":"gossip",
+                      "type":"friendly_node_subscription",
+                      "attrs":["name","wellKnown_Tx","host"]
+                    },
+                    // {
+                    //   "domain":"gossip",
+                    //   "type":"heartbeat"
+                    // },
+                    {
+                      "domain":"gossip",
+                      "type":"toggle_heartbeat"
+                    },
+                    {
+                      "domain":"gossip",
+                      "type":"update_heartbeat",
+                      "attrs":["new_interval"]
+                    },
+                    {
+                      "domain":"gossip",
+                      "type":"clear_prompted"
+                    }
+                    ] }
+
+    getPeerForRumor = function(others_seen) {
+      //thisPicoSeen = generateSeen();
+      mapToThisPicosNumber = others_seen.klog("OTHERS SEEN").map(function(value,key){
+        value{meta:picoId}.defaultsTo(-1)
+      }).klog("MAP FOR EACH PICO FOR THIS PICO");
+      mostNeededPeer = mapToThisPicosNumber.values().sort("numeric")[0];
+      mapToThisPicosNumber.filter(function(value,key) {
+        value == mostNeededPeer
+      })
+    }
+
+    getPeerForSeen = function() {
+      //seen = generateSeen();
+      numberOthers = ent:peers.keys().klog("PEERS KEYS").length().klog("SEEN LENGTH");
+      ent:peers.keys()[random:integer(numberOthers - 1)]
+    }
+
+    prepareMessage = function(others_seen) {
+      random:integer(1) => prepareSeenMessage(others_seen) | prepareRumorMessage(others_seen)
+    }
+
+    prepareSeenMessage = function(others_seen) {
+      {
+      "message":generateSeen(),
+      "destinationPeer":getPeerForSeen().klog("The returned peer for seen was: "),
+      "type":"seen"
+      }.klog("PREPARE SEEN MESSAGE RETURNED")
+    }
+
+    generateSeen = function() {
+      ent:picos_temp_logs.map(function(value,key) {
+        getHighestSequence(value)
+      })
+    }
+
+    getHighestSequence = function(messageMap) {
+      messageNumbers = messageMap.keys().map(function(value) {value.split(":")[1].as("Number")}).sort("numeric").klog("MESSAGE NUMBERS: ");
+      messageNumbers[0].as("Number") == 0 =>
+      messageNumbers.filter(function(value) {
+        (not (messageNumbers >< (value + 1)))
+      })[0] | -1
+    }
+
+    prepareRumorMessage = function(others_seen) {
+      peerId = getPeerForRumor(others_seen);
+      destinationPeer = peerId.klog("PEER FOR RUMOR RETURNED");
+      rumor = generateRumor(destinationPeer.values()[0]).klog("MESSAGE NUMERIC INDEX");
+      {
+        "message": rumor,
+        "destinationPeer": destinationPeer.keys()[0],
+        "type":"rumor",
+        "picoName":wrangler:myself(){"name"}
+      }
+    }
+
+    generateRumor = function(messageNumberToSend) {
+      picoMessageIndex = (meta:picoId + ":" + (messageNumberToSend.as("Number") + 1)).klog("MESSAGE INDEX");
+      ent:picos_temp_logs{[meta:picoId, picoMessageIndex]}.klog("RETURNED FROM GENERATE RUMOR: ")
+    }
+
+    retrieve_temperature_logs = function() {
+      ent:picos_temp_logs.klog("picos temp logs: ")
+    }
+
+    others_seen = function() {
+      ent:others_seen
+    }
+
+    is_enabled = function() {
+      ent:enabled == true => "Enabled" | "Disabled"
+    }
+
+    current_heartbeat_interval = function() {
+      ent:heartbeat_interval.defaultsTo(5)
+    }
+
+
+      // reports_array = ent:reports.values();
+      // (reports_array.length()) <= 5 =>
+      // reports_array |
+      // reports_array.slice((reports_array.length() - 5), reports_array.length() - 1)
+
+    //Gets the 10 most recent readings for each pico
+    get_report = function() {
+      myself = wrangler:myself();
+      thisPicoId = myself{"id"};
+      thisPicoName = myself{"name"};
+      mapResult = ent:picos_temp_logs.map(function(value,key) {
+        messageArray = value.values();
+        (messageArray.length() <= 10 => messageArray | messageArray.slice(messageArray.length() - 10, messageArray.length() - 1));
+      });
+      // check if no logs. if no logs return empty array with this pico, otherwise do further processing and return report
+      ent:picos_temp_logs.isnull() => {}.put(thisPicoName, []) |
+      mapResult.keys().collect(function(value) {
+        value == thisPicoId.klog("id") => thisPicoName.klog("name") | ent:recorded_names{[value]}.defaultsTo("Pico Unidentified")
+      }).klog("map result: ").map(function(value, key) {
+        mapResult{value}
+      })
+    }
+
+    averages_of_report = function() {
+      report = get_report();
+      report.map(function(value, key) {
+        sum = value.klog("report value").reduce(function(a,b) {
+          (a.klog("a temperature")+b{"temperature"}).klog("b temperature: ")
+        }, 0);
+        sum/(value.length() == 0 => 1 | value.length());
+      })
+    }
+
+    full_report = function() {
+      [get_report(), averages_of_report()]
+    }
+
+    getCount = function() {
+      ent:counter
+    }
+
+    getLastMessage = function() {
+      ent:last_message_sent
+    }
+
+    myself = function() {
+      wrangler:myself()
+    }
+
+    // MANIFOLD FUNCTIONS AND VARIABLES
+    app = {"name":"Neighborhood Temperatures","version":"0.0"/* img: , pre: , ..*/};
+
+    bindings = function(){
+      {
+        "temps": get_report()
+      };
+    }
+  }
+
+  /*
+     ------------------------ MANIFOLD API ------------------------
+  */
+
+
+  rule discovery {
+    select when manifold apps
+    send_directive("app discovered...", {"app": app, "rid": meta:rid, "bindings": bindings()} );
+  }
+
+  /*
+    ------------------------ END MANIFOLD API------------------------
+  */
+  //Update this picos temperature logs every time the sensor sends a new reading
+  rule on_wovyn_heartbeat {
+    select when wovyn new_temperature_reading
+    pre {
+      messageID = meta:picoId + ":" + ent:counter.defaultsTo(0)
+
+      messageContents = {
+        "message_id": messageID,
+        "temperature":event:attr("temperature"),
+        "timestamp":event:attr("timestamp"),
+        "picoName":wrangler:myself(){"name"}
+      }
+    }
+    fired {
+      //ent:picos_temp_logs{[meta:picoId,messageID]} := messageContents; // This kept returning null
+      ent:picos_temp_logs := ent:picos_temp_logs.defaultsTo({}).put([meta:picoId, messageID], messageContents); // This works
+      ent:counter := ent:counter.defaultsTo(0) + 1
+    }
+  }
+
+
+  //Rules to handle sending rumors and seen messages
+  rule gossip_heartbeat {
+    select when gossip heartbeat where ent:enabled
+    pre{
+      message_vehicle = prepareMessage(ent:others_seen.klog("OTHERS SEEN WHEN CALLED"))
+      destination_picoID = message_vehicle{"destinationPeer"}.klog("MESSAGE_VEHICLE: ")
+      actualMessage = message_vehicle{"message"}.klog("ACTUAL MESSAGE: ")
+      message_type = message_vehicle{"type"}
+      message_number = actualMessage{"message_id"}.klog("BEFORE SPLIT MESSAGE ID").split(":")[1].klog("SPLIT FOR MESSAGE NUMBER: ")
+      destination_eci = ent:peers{[destination_picoID, "Tx"]}
+      destination_host = ent:peers{[destination_picoID, "host"]}.defaultsTo(meta:host).klog("HOST IS: ")
+    } if actualMessage && ent:enabled.defaultsTo(true) then
+      event:send({
+        "eci":destination_eci.klog("DESTINATION ECI"),
+        "eid":"gossipin'",
+        "domain":"gossip",
+        "type":message_type,
+        "attrs": {
+          "message":actualMessage.klog("ACTUAL MESSAGE IS: "),
+          "this_picoID":meta:picoId
+        }
+      }, destination_host)
+    fired {
+      raise gossip event "update_state" attributes {
+        "picoID":destination_picoID,
+        "type":message_type,
+        "message_number":message_number,
+        "original_pico":actualMessage{"message_id"}.split(":")[0]
+      }
+    }
+    finally {
+      ent:last_message_sent := actualMessage;
+      schedule gossip event "heartbeat" at time:add(time:now(), {"seconds": ent:heartbeat_interval.defaultsTo(5)})
+    }
+  }
+
+  rule update_state_from_message_type {
+    select when gossip update_state
+    pre {
+      message_type = event:attr("type")
+      picoID = event:attr("picoID")
+      message_sent_number = event:attr("message_number").klog("MESSAGE NUMBER FOR UPDATE STATE WAS:")
+      current_message = ent:others_seen{[picoID,meta:picoId]}.defaultsTo(-1);
+      original_pico = event:attr("original_pico")
+    }
+    if (message_type == "rumor" && current_message < message_sent_number && original_pico == meta:picoId) then
+    noop();
+    fired {
+      ent:others_seen := ent:others_seen.defaultsTo({}).put([picoID,meta:picoId], message_sent_number.as("Number"))
+    }
+
+  }
+
+//Rules for adding new peers
+
+
+
+
+
+
+
+  rule auto_accept {
+    select when wrangler inbound_pending_subscription_added
+    pre {
+      attributes = event:attrs.klog("subcription:")
+    }
+    always {
+      ent:subscription_inbound := event:attrs;
+      raise wrangler event "pending_subscription_approval"
+        attributes attributes//.put(wrangler:myself{"name"});=
+
+
+    }
+  }
+
+  rule get_peer_ids {
+    select when wrangler subscription_added
+    foreach subscription:established() setting (subscription)
+    pre {
+      //Tx = event:attr("_Tx").defaultsTo(event:attr("Tx")).klog("tx result: ")//.defaultsTo(event:attr("Tx"))
+    }
+    if (subscription{"Rx_role"}.klog("RX_ROLE: ") == "node") then
+      event:send({
+        "eci":subscription{"Tx"},
+        "eid":"getting_info",
+        "domain":"gossip",
+        "type":"get_peer_id",
+        "attrs":{
+          "channel":subscription{"Tx"}
+      }
+    }, subscription{"Tx_host"}.defaultsTo(meta:host).klog("SUB_ADDED SENDING GET_PEER_ID TO HOST: "))
+    fired {
+      ent:subscription_result := event:attrs
+    }
+  }
+
+  rule send_picoID {
+    select when gossip get_peer_id
+    pre {
+      id = meta:picoId;
+      relevant_subscription = subscription:established().filter(function(value) {
+        value{"Rx"} == event:attr("channel")
+      })[0]
+      tx = relevant_subscription{"Tx"}
+
+    }
+    event:send({
+      "eci":tx,
+      "eid":"sending_info",
+      "domain":"gossip",
+      "type":"new_peer_info",
+      "attrs":{
+        "id":id,
+        "channel":event:attr("channel"),
+        "host":meta:host,
+        "name":wrangler:myself(){"name"}
+      }
+    }, relevant_subscription{"Tx_host"}.klog("GET_PEER_ID SENDING NEW_PEER_INFO TO HOST: "))
+  }
+
+  rule record_new_peer_tx {
+    select when gossip new_peer_info
+    pre {
+    other_picoID = event:attr("id")
+    other_pico_tx = event:attr("channel")
+    other_pico_host = event:attr("host").klog("OTHER PICO HOST IS: ")
+    other_pico_name = event:attr("name")
+    }
+    noop();
+    fired {
+      ent:peers := ent:peers.defaultsTo({}).put([other_picoID], {"Tx":other_pico_tx, "host":other_pico_host,"name":other_pico_name});
+      //ent:others_seen{[other_picoID, meta:picoId]} := -1
+      ent:others_seen := ent:others_seen.defaultsTo({}).put([other_picoID,meta:picoId], -1)
+    }
+  }
+  /*
+  rule record_subscription_id {
+    select when wrangler pending_subscription
+    pre {
+      subID = event:attr("Id")
+      //sensor_type = event:attr("sensor_type")
+      name = event:attr("name").replace(re#TempSensor #, "")
+      //substr(11) == "TempSensor " => event:attr("name").substr(11) | event:attr("name")
+    }
+    noop()//send_directive("PENDING_SUB", event:attrs.klog("EVENT ATTRIBUTES"))
+    always {
+      ent:sensors{[name, "subscription_id"]} := subID;
+      //ent:sensors{[name,"sensor_type"]} := sensor_type
+    }
+  }
+  */
+  rule friendly_node_subscription {
+    select when gossip friendly_node_subscription
+    pre {
+      name = event:attr("name")
+      rx_role = "node"
+      tx_role = "node"
+      //sensor_role = event:attr("sensor_role")
+      channel_type = "subscription"
+      wellknown_Tx = event:attr("wellKnown_Tx")
+      host = event:attr("host") => event:attr("host") | meta:host
+    }
+    if wellknown_Tx && name then
+    noop()
+    //send_directive("hey", {"wellknown":wellknown_Tx, "name":name})
+    fired {
+      raise wrangler event "subscription"
+        attributes {
+        "name":name,
+        "Rx_role": rx_role,
+        "Tx_role":tx_role,
+        "channel_type":channel_type,
+        "wellKnown_Tx":wellknown_Tx,
+        "sensor_role":sensor_role,
+        "Tx_host":host
+        }
+
+    }
+  }
+
+  /**
+   * Rules for receiving gossip events
+   *
+   *
+   *
+   * */
+
+   rule react_to_seen {
+     select when gossip seen
+       foreach generateSeen() setting (number, pico)
+        pre {
+          message = event:attr("message");
+          thatPicoSeen = message{[pico]}.defaultsTo(-1);
+
+        }
+        if number >= thatPicoSeen then
+        noop()
+        fired {
+          messages_to_send = ent:picos_temp_logs{[pico]}.filter(function(value, key) {
+            key.split(":")[1] > thatPicoSeen
+          });
+
+          raise gossip event "send_rumor" attributes {
+            "destination_pico":event:attr("this_picoID"),
+            "messages":messages_to_send.klog("MESSAGES TO SEND")
+          };
+          //messageNumbersToSend.map(function(value,))
+
+          raise gossip event "update_others_seen" attributes {
+            "original_picoID":event:attr("this_picoID"),
+            "number_of_pico_messages_seen":thatPicoSeen,
+            "relevant_pico":pico
+          }
+
+        }
+
+   }
+
+   rule update_others_seen {
+     select when gossip update_others_seen
+     pre {
+       picoID = event:attr("original_picoID")
+       num_messages = event:attr("number_of_pico_messages_seen")
+       relevant_pico = event:attr("relevant_pico")
+     }
+     if ent:others_seen{[picoID,relevant_pico]}.defaultsTo(-1) < num_messages then
+     noop()
+     fired {
+       ent:others_seen := ent:others_seen.defaultsTo({}).put([picoID, relevant_pico], num_messages.as("Number"))
+     }
+   }
+
+   rule send_rumors_from_seen {
+     select when gossip send_rumor
+       foreach event:attr("messages") setting (value, key)
+         pre {
+           destination_picoID = event:attr("destination_pico")
+           tx = ent:peers{[event:attr("destination_pico"), "Tx"]}
+           txhost = ent:peers{[event:attr("destination_pico"), "host"]}
+         }
+         event:send({
+          "eci":tx.klog("DESTINATION ECI FOR SENDING THOSE RUMORS"),
+          "eid":"gossipin'",
+          "domain":"gossip",
+          "type":"rumor",
+          "attrs": {
+            "message":value
+        }
+      }, txhost)
+      fired {
+        raise gossip event "update_state" attributes {
+          "picoID":event:attr("destination_pico"),
+          "type":"rumor",
+          "message_number":key.split(":")[1],
+          "original_pico":key.split(":")[0]
+        }
+      }
+   }
+
+   rule react_to_rumor {
+     select when gossip rumor
+      pre {
+        message_id = event:attr("message"){"message_id"}.klog("MESSAGE ID WAS: ")
+        relevant_pico = message_id.split(":")[0].klog("FOUND RELEVANT PICO: ")
+      }
+      if (relevant_pico && message_id && event:attr("message")) then
+      noop()
+      fired {
+        ent:recorded_names := ent:recorded_names.defaultsTo({}).put([relevant_pico], event:attr("message"){"picoName"});
+        ent:picos_temp_logs := ent:picos_temp_logs.defaultsTo({}).put([relevant_pico, message_id], event:attr("message"))
+      }
+
+   }
+
+   rule update_heartbeat_interval {
+     select when gossip update_heartbeat
+     pre {
+       new_interval = event:attr("new_interval").as("Number")
+     }
+     if new_interval > 0 then
+     noop()
+     fired {
+       ent:heartbeat_interval := new_interval
+     }
+   }
+
+   rule toggle_heartbeat {
+     select when gossip toggle_heartbeat
+     pre {
+
+     }
+     send_directive("Heartbeat Toggle: " , {"body": "Heartbeat Toggle: " + not ent:enabled })
+     fired {
+       ent:enabled := not (ent:enabled.defaultsTo(false));
+       raise gossip event "heartbeat_toggled"
+     }
+   }
+
+   rule start_heartbeat_if_enable {
+     select when gossip heartbeat_toggled
+     pre {
+       enabled = ent:enabled.defaultsTo(true)
+     }
+     if (enabled) then
+     noop()
+     fired {
+       schedule gossip event "heartbeat" at time:add(time:now(), {"seconds": ent:heartbeat_interval.defaultsTo(5)})
+     }
+   }
+
+   rule install_dependencies {
+     select when wrangler ruleset_added where rids >< meta:rid
+     pre {
+
+     }
+     noop()
+     fired {
+       raise wrangler event "install_rulesets_requested"
+        attributes {
+          "rids":["io.picolabs.wovyn_base"]
+        }
+     }
+   }
+
+   rule manual_clear {
+     select when gossip clear_prompted
+     pre {
+
+     }
+     fired {
+       clear ent:picos_temp_logs;
+       clear ent:enabled;
+       clear ent:counter;
+       clear ent:others_seen;
+       clear ent:last_message_sent;
+     }
+   }
+}
