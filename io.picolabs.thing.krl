@@ -35,11 +35,16 @@ ruleset io.picolabs.thing {
 
   rule installApp {
     select when manifold installapp
-    pre {}
-    noop()
+    pre {
+        absoluteURL = meta:rulesetURI;
+    }
+    if absoluteURL then noop()
     fired{
-      raise wrangler event "install_rulesets_request"
-        attributes event:attrs;
+      raise wrangler event "install_ruleset_request"
+       attributes {
+        "rid" : event:attr("rid"),
+        "absoluteURL": absoluteURL // getting this from the same repo as this ruleset
+      }
     }
   }
   
@@ -48,8 +53,10 @@ ruleset io.picolabs.thing {
     pre {}
     noop();
     fired {
-      raise wrangler event "uninstall_rulesets_request"
-        attributes event:attrs;
+      raise wrangler event "uninstall_ruleset_request"
+        attributes {
+          "rid" : event:attr("rid")
+        }
     }
   }
 

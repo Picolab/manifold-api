@@ -5,6 +5,7 @@ ruleset io.picolabs.manifold_pico {
     shares __testing, getManifoldInfo, isAChild, getThings
     provides __testing, getManifoldInfo, getThings
   }//end meta
+
   global {
     
     thingRids = "io.picolabs.thing"
@@ -40,24 +41,29 @@ ruleset io.picolabs.manifold_pico {
       })
     }
 
+    // NOt using this in things anymore. Still used in communities, but that needs to be refactored to not use this
     initiate_subscription = defaction(eci, channel_name, wellKnown, role_type, optionalHost = meta:host) {
       every{
         event:send({
-          "eci": eci, "eid": "subscription",
-          "domain": "wrangler", "type": "subscription",
+          "eci": eci, 
+          "eid": "subscription",
+          "domain": "wrangler", 
+          "type": "subscription",
           "attrs": {
                    "name"        : event:attr("name"),
-                   "picoID"     : event:attr("id"),
+                   "picoID"      : event:attr("id"),
                    "Rx_role"     : role_type,
                    "Tx_role"     : "manifold_pico",
                    "Tx_Rx_Type"  : "Manifold" , // auto_accept
                    "channel_type": "Manifold",
                    "wellKnown_Tx": wellKnown, //this should by best practice be the parent's or the pico being requested's wellknown eci
-                   "Tx_host"     : meta:host } //allow cross engine subscriptions
-        }, host = optionalHost)
+                   "Tx_host"     : meta:host 
+                  } //allow cross engine subscriptions
+          }.klog("Subscription parameters"), 
+          host = optionalHost)
       }
     }
-
+    
     subIDFromPicoID = function(picoID, theMapToCheck) {
       theMapToCheck.defaultsTo({}){[picoID, "subID"]}
     }
@@ -86,7 +92,8 @@ ruleset io.picolabs.manifold_pico {
     
     appChannelName = "Manifold"
     appChannelType = "App"
-  }//end global
+
+  } //end global
 
   
 
@@ -120,14 +127,37 @@ ruleset io.picolabs.manifold_pico {
   }
 
   rule thingCompleted {
-    select when wrangler child_initialized
-      where event:attr("event_name") == "manifold_create_thing"
-    initiate_subscription(event:attr("eci"), event:attr("name"), subscription:wellKnown_Rx(){"id"}, thing_role);
+    select when wrangler child_initialized where event:attr("event_name") == "manifold_create_thing"
+    pre {
+      eci = event:attr("eci");
+      wellKnown = subscription:wellKnown_Rx(){"id"};
+      role_type = thing_role;
+      children = wrangler:children();
+      picoID = ctx:query(eci,"io.picolabs.wrangler","myself"){"id"}.klog("PicoID"); // may be better ways to do this
+    }
+    // initiate_subscription(event:attr("eci"), event:attr("name"), subscription:wellKnown_Rx(){"id"}, thing_role);
+    event:send({
+          "eci": eci, 
+          "eid": "subscription",
+          "domain": "wrangler", 
+          "type": "subscription",
+          "attrs": {
+                   "name"        : event:attr("name"),
+                   "picoID"      : picoID,
+                   "Rx_role"     : role_type,
+                   "Tx_role"     : "manifold_pico",
+                   "Tx_Rx_Type"  : "Manifold" , // auto_accept
+                   "channel_type": "Manifold",
+                   "wellKnown_Tx": wellKnown, //this should by best practice be the parent's or the pico being requested's wellknown eci
+                   "Tx_host"     : meta:host 
+                  } //allow cross engine subscriptions
+          } // .klog("Subscription parameters")
+      )
   }
 
   rule autoAcceptSubscriptions {
     select when wrangler inbound_pending_subscription_added
-      where event:attr("rs_attrs"){"Tx_Rx_Type"} == "Manifold"
+      where event:attr("Tx_Rx_Type") == "Manifold"
     always {
       raise wrangler event "pending_subscription_approval" attributes event:attrs.klog("sub attrs"); // Simplified and idiomatic subscription acceptance
     }
@@ -164,11 +194,13 @@ ruleset io.picolabs.manifold_pico {
                                 .put({"rids": communityRids})
     }
   }
+
   rule communityCompleted {
     select when wrangler child_initialized
       where event:name == "manifold_create_community" 
     initiate_subscription(event:attr("eci"), event:attr("name"), subscription:wellKnown_Rx(){"id"}, community_role);
   }
+
   rule trackCommSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
     pre {
