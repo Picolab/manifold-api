@@ -5,6 +5,8 @@ ruleset io.picolabs.safeandmine {
     use module io.picolabs.subscription alias sub
   }
   global {
+
+    /*
     __testing = { "queries":
       [ { "name": "__testing" }
         , { "name": "getInformation", "args" : [ "info" ] }
@@ -20,7 +22,7 @@ ruleset io.picolabs.safeandmine {
       , { "domain": "safeandmine", "type": "update_registry_eci", "attrs": [ "eci" ] }
       ]
     }
-    
+    */
     
     getInformation = function(info) {
       data = ent:contactInfo.defaultsTo({});

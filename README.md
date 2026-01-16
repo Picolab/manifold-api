@@ -26,7 +26,7 @@ The following files have been reviewed and updated for Pico Engine 1.0 compatibi
 
 - ✅ **`io.picolabs.thing.krl`** - Updated for Pico Engine 1.0 compatibility
 
-- ✅ **`io.picolabs.safeandmine.krl`** - Updated for Pico Engine 1.0 compatibility
+- ✅ **`io.picolabs.safeandmine.krl`** - Partially updated for Pico Engine 1.0 compatibility. Tags are not yet working. 
 
 ## Files Pending Review
 
