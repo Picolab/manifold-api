@@ -370,7 +370,7 @@ ruleset io.picolabs.manifold_pico {
     pre {
       existing_channels = wrangler:channels();
       app_channel = existing_channels.filter(function(chan){
-        chan{"name"} == appChannelName && chan{"type"} == appChannelType
+        chan{"name"} == appChannelName
       });
       channel_exists = app_channel.length() > 0;
     }

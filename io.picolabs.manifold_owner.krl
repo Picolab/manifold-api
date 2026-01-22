@@ -85,6 +85,25 @@ ruleset io.picolabs.manifold_owner {
     }
   }
 
+   rule createChannel {
+    select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
+    pre {
+      channelName = "initialization"
+      eventPolicy = {"allow": [], "deny": [{"domain": "*", "name": "*"}]}
+      queryPolicy = {"allow":[{"rid": meta:rid, "name": "getManifoldPico"}], "deny": []}
+      existing_channels = wrangler:channels();
+      app_channel = existing_channels.filter(function(chan){
+        chan{"name"} == channelName 
+      });
+      channel_exists = app_channel.length() > 0;
+    }
+    if not channel_exists then
+      wrangler:createChannel([channelName], eventPolicy, queryPolicy) setting(channel)
+    fired {
+      ent:init_channel_eci := channel{"id"}
+    }
+  }
+
   rule install_manifold_pico_ruleset {
     select when wrangler child_initialized where event:attr("event_type") == "manifold_create_owner"
     pre {
