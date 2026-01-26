@@ -2,7 +2,7 @@ ruleset io.picolabs.manifold_owner {
   meta {
     use module io.picolabs.subscription alias Subscriptions
     use module io.picolabs.wrangler alias wrangler
-    shares __testing, getManifoldPico
+    shares getManifoldPico, getManifoldPicoEci
   }
   global {
 
@@ -15,19 +15,29 @@ ruleset io.picolabs.manifold_owner {
       children = wrangler:children().filter(function(x) {
         x{"name"} == config{"pico_name"}
       });
-      children.length() > 0 => children[0].klog("child") | "No Manifold Pico"
+      children.length() > 0 => children[0].klog("Manifold Pico") 
+                             | "No Manifold Pico"
+    }
+
+     getManifoldPicoEci = function(){
+      children = wrangler:children().filter(function(x) {
+        x{"name"} == config{"pico_name"}
+      });
+      children.length() > 0 => getManifoldEciFromChild(children[0].klog("Manifold Pico")).klog("Manifold ECI") 
+                             | "No Manifold Pico"
     }
     
+    //deprecate? 
     getManifoldEci = function(channels){
       manifolds = channels.filter(function(chan){
-                    chan{"name"} == config{"pico_name"} && chan{"type"} == config{"channel_type"}
+                    chan{"name"} == "manifold" && chan{"type"} == config{"channel_type"}
                   });
       manifolds.head(){"eci"} || "";
     }
     
     getManifoldEciFromChild = function(child){
-      channels = wrangler:skyQuery(child{"eci"}, "io.picolabs.wrangler", "channels", {});
-      channels.isnull() => null | getManifoldEci(channels)
+      channels = wrangler:picoQuery(child{"eci"}, "io.picolabs.wrangler", "channels", {"tags": "manifold"}).klog("Channels");
+      channels.isnull() => null | channels.head(){"id"}
     }
   } //end global
 
@@ -90,7 +100,9 @@ ruleset io.picolabs.manifold_owner {
     pre {
       channelName = "initialization"
       eventPolicy = {"allow": [], "deny": [{"domain": "*", "name": "*"}]}
-      queryPolicy = {"allow":[{"rid": meta:rid, "name": "getManifoldPico"}], "deny": []}
+      queryPolicy = {"allow":[{"rid": meta:rid, "name": "getManifoldPico"},
+                              {"rid": meta:rid, "name": "getManifoldPicoEci"}
+                             ], "deny": []}
       existing_channels = wrangler:channels();
       app_channel = existing_channels.filter(function(chan){
         chan{"name"} == channelName 
