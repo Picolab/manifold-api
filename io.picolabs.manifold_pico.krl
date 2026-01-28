@@ -2,8 +2,8 @@ ruleset io.picolabs.manifold_pico {
   meta {
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
-    shares __testing, getManifoldInfo, isAChild, getThings
-    provides __testing, getManifoldInfo, getThings
+    shares getManifoldInfo, isAChild, getThings, getTagServer
+    provides getManifoldInfo, getThings
   }//end meta
 
   global {
@@ -82,6 +82,12 @@ ruleset io.picolabs.manifold_pico {
 
     isACommunity = function(picoID) {
       ent:communities.defaultsTo({}).keys() >< picoID
+    }
+
+    getTagServer = function() {
+      parent = wrangler:parent_eci().klog("parent") // ask mom
+      tag_pico = wrangler:picoQuery(parent, "io.picolabs.manifold_owner", "getTagServer")
+      tag_pico
     }
 
     initializationRids = ["io.picolabs.notifications",
@@ -363,6 +369,18 @@ ruleset io.picolabs.manifold_pico {
             "absoluteURL": absoluteURL
           }
       }
+  }
+
+   rule set_tag_server {
+    select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
+    pre {
+      parent = wrangler:channels("system,child").head(){"id"}.klog("parent")
+      tag_pico = wrangler:picoQuery(parent, "io.picolabs.manifold_owner", "getTagServer")
+    }
+    noop();
+    always {
+      ent:tag_pico := tag_pico
+    }
   }
   
   rule createAppChannel {

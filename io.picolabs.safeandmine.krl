@@ -1,7 +1,7 @@
 ruleset io.picolabs.safeandmine {
   meta {
-    shares __testing, getInformation, getTags
-    use module io.picolabs.wrangler alias Wrangler
+    shares getInformation, getTags
+    use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias sub
   }
   global {
@@ -30,7 +30,7 @@ ruleset io.picolabs.safeandmine {
     }
     
     getTags = function() {
-      ent:tagStore.defaultsTo({}).map(function(v,k) {
+      ent:tagStore.defaultsTo({}).klog("tag store").map(function(v,k) {
         v.keys()
       });
     }
@@ -51,13 +51,15 @@ ruleset io.picolabs.safeandmine {
       "query" : {
           "allow" : [
             { "rid" : "io.picolabs.safeandmine", "name" : "getInformation"}
-            ]
+            ], 
+          "deny": []
       },
       "event" : {
         "allow" : [
-          { "domain" : "safeandmine", "type" : "notify" }
-          , { "domain" : "safeandmine", "type" : "tag_register_response" }
-          ]
+          { "domain" : "safeandmine", "name" : "notify" },
+          { "domain" : "safeandmine", "name" : "tag_register_response" }
+          ], 
+        "deny": []
       }
     }
     
@@ -80,13 +82,17 @@ ruleset io.picolabs.safeandmine {
     select when safeandmine update_registry_eci
     
     pre {
-      eci = event:attr("eci")
+      parent = wrangler:parent_eci().klog("parent") // ask mom
+      tag_pico = wrangler:picoQuery(parent, "io.picolabs.manifold_pico", "getTagServer").klog("tag Pico")
+      eci = tag_pico{"eci"}
+      host = tag_pico{"host_url"}
     }
     
     if eci then noop();
     
     fired {
       ent:registry_eci := eci;
+      ent:registry_host := host;
     }
   }
   
@@ -202,15 +208,30 @@ ruleset io.picolabs.safeandmine {
           }
       }
   }
+
+  rule check_tag_registry {
+    select when safeandmine new_tag
+    pre {
+      eci = ent:registry_eci
+    }
+    if eci.isnull() then noop() 
+    fired {
+      raise safeandmine event "update_registry_eci" 
+    }
+  }
   
   rule create_tag_channel {
     select when safeandmine new_tag_channel
     pre {
       channel_tag = event:attr("domain") + "/" + event:attr("tagID");
     }
-    wrangler:createChannel([channel_tag], policy{"query"}, policy{"event"}) setting(channel)
+    // wrangler:createChannel([channel_tag], policy{"event"}, policy{"query"}) setting(channel)
     fired {
-      ent:tag_channel_eci := channel{"id"}
+       raise wrangler event "new_channel_request" attributes event:attrs.put({
+        "tags":[channel_tag],
+        "eventPolicy":policy{"event"},
+        "queryPolicy":policy{"query"},
+      })
     }
   }
   
@@ -218,17 +239,24 @@ ruleset io.picolabs.safeandmine {
     select when wrangler channel_created
     
     pre {
-      tagID = event:attr("attrs"){"tagID"}.klog("TAGID");
-      domain = event:attr("attrs"){"domain"}.klog("DOMAIN");
-      channel = event:attr("channel"){"id"}.klog("CHANNEL");
+      tagID = event:attrs{"tagID"}.klog("TAGID");
+      domain = event:attrs{"domain"}.klog("DOMAIN");
+      channel = event:attrs{"channel"}{"id"}.klog("CHANNEL");
     }
     
-    event:send({"eci": ent:registry_eci.defaultsTo("CEmo7mURALxUzEVLkN2Fwc"), "domain": "safeandmine", "type": "register_tag", "attrs" : { "tagID" : tagID, "DID" : channel, "domain" : domain } });
-    //http:post("http://localhost:3001/safeandmine/api/tags", json = { "tagID" : tagID, "DID" : channel, "domain" : domain }, autoraise=channel ) setting(resp)
-    //http:post("https://apps.picolabs.io/safeandmine/api/tags", json = { "tagID" : tagID, "DID" : channel }, autoraise=channel ) setting(resp)
-    
+    event:send({"eci": ent:registry_eci, 
+                "domain": "safeandmine", 
+                "name": "register_tag", 
+                "attrs" : { "tagID" : tagID, 
+                            "DID" : channel, 
+                            "domain" : domain,
+                            "pico_host": meta:host 
+                          } 
+                });
+     
     always {
       ent:channels := ent:channels.defaultsTo([]).append(channel)
+      ent:tag_channel_eci := channel{"id"} // FIX: assuming only one tag? 
     }
     
   }
@@ -316,7 +344,7 @@ ruleset io.picolabs.safeandmine {
       picoId = meta:picoId;
       app = "SafeAndMine";
       rid = meta:rid;
-      name = Wrangler:name();
+      name = wrangler:name();
       message = "Your tag " + tagID + " has been scanned";
       attrs = { 
         "picoId" : picoId,

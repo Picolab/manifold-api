@@ -1,20 +1,13 @@
 ruleset io.picolabs.new_tag_registry {
   meta {
-    shares __testing, get_tag_store, scan_tag
+    use module io.picolabs.wrangler alias wrangler
+    shares get_tag_store, scan_tag
   }
   global {
-    __testing = { "queries":
-      [ { "name": "__testing" }
-      , { "name": "get_tag_store" }
-      , { "name": "scan_tag", "args": [ "tagID", "domain" ] }
-      ] , "events":
-      [ { "domain": "safeandmine", "type": "register_tag", "attrs" : [ "tagID", "domain", "DID" ] }
-      , { "domain": "safeandmine", "type": "deregister_tag", "attrs" : [ "tagID", "domain" ] }
-      ]
-    }
+    
     
     scan_tag = function(tagID, domain) {
-      ent:tag_store.defaultsTo({}).get([domain, tagID.uc(), "did"])
+      ent:tag_store.defaultsTo({}).get([domain, tagID.uc()])
     }
     
     get_tag_store = function() {
@@ -72,5 +65,24 @@ ruleset io.picolabs.new_tag_registry {
     }
     
     send_directive("_redirect", {"url" : url})
+  }
+
+  rule createChannel { // fix policies
+    select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
+    pre {
+      channelName = "registration"
+      eventPolicy = {"allow": [{"domain": "*", "name": "*"}], "deny": []}
+      queryPolicy = {"allow":[{"rid": "*", "name": "*"}], "deny": []}
+      existing_channels = wrangler:channels().klog("Current channels");
+      app_channel = existing_channels.filter(function(chan){
+        chan{"name"} == channelName 
+      });
+      channel_exists = app_channel.length() > 0;
+    }
+    if not channel_exists then
+      wrangler:createChannel([channelName], eventPolicy, queryPolicy) setting(channel)
+    fired {
+      ent:registration_channel_eci := channel{"id"}
+    }
   }
 }
