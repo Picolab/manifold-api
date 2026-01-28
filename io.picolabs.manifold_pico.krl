@@ -69,9 +69,9 @@ ruleset io.picolabs.manifold_pico {
     }
 
     isAChild = function(picoID) {
-      children = wrangler:children();
+      children = wrangler:children().klog("Children in isAChild()");
       childIDs = children.map(function(child) {
-        child{"id"}
+        child{"eci"}
       });
       childIDs >< picoID
     }
@@ -139,7 +139,7 @@ ruleset io.picolabs.manifold_pico {
       wellKnown = subscription:wellKnown_Rx(){"id"};
       role_type = thing_role;
       children = wrangler:children();
-      picoID = ctx:query(eci,"io.picolabs.wrangler","myself"){"id"}.klog("PicoID"); // may be better ways to do this
+      picoID = eci // ctx:query(eci,"io.picolabs.wrangler","myself"){"id"}.klog("PicoID"); // may be better ways to do this
     }
     // initiate_subscription(event:attr("eci"), event:attr("name"), subscription:wellKnown_Rx(){"id"}, thing_role);
     event:send({
@@ -254,8 +254,8 @@ ruleset io.picolabs.manifold_pico {
       send_directive("Attempting to remove Thing", { "thing": ent:things{[picoID, "name"]}, "picoID": picoID })
     fired {
       ent:things := ent:things.filter(function(thing, key){ key != picoID});
-      raise wrangler event "child_deletion"
-        attributes { "id": picoID } //lowercase "id" is wrangler's way to delete a child by picoID
+      raise wrangler event "child_deletion_request"
+        attributes { "eci": picoID } 
     }
   }
 

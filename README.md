@@ -65,8 +65,9 @@ This directory contains the KRL (Kynetx Rules Language) rulesets used by the Man
 
 ### Bootstrap Architecture (Three-Part Initialization)
 
-1. **Tag registry pico** — A tag registry pico should be created as a child of the **root pico**, and the `io.picolabs.new_tag_registry` ruleset installed in it.
-2. **Owner pico** — The owner pico should be created as a child of the **root pico**, and the `io.picolabs.manifold_owner` ruleset installed in it. Installing `manifold_owner` in the owner pico initializes Manifold (creates the Manifold child pico, etc.).
+1. **Tag registry pico** — Create a tag registry pico as a child of the **root pico**, and install the `io.picolabs.new_tag_registry` ruleset in it. This should create a channel called `registration`.
+
+2. **Owner pico** — Create a pico to represent the owner as a child of the **root pico**, and install the `io.picolabs.manifold_owner` ruleset in it. Installing `manifold_owner` in the owner pico initializes Manifold (creates an initialization channel, creates the Manifold child pico, etc.).
 
 3. **Tag server registration** — The tag registry's `registration` ECI must be stored in the owner pico by raising the `manifold:new_tag_server` event to the owner pico **before any things are created**. This initializes the tag server reference so the owner (and Manifold) can use the tag registry.
 
