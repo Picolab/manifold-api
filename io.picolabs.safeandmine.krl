@@ -1,7 +1,7 @@
 ruleset io.picolabs.safeandmine {
   meta {
     shares __testing, getInformation, getTags
-    use module io.picolabs.wrangler alias Wrangler
+    use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias sub
   }
   global {
@@ -47,19 +47,19 @@ ruleset io.picolabs.safeandmine {
     }
     
     policy = {
-      "name" : "registry pico events only",
-      "query" : {
-          "allow" : [
-            { "rid" : "io.picolabs.safeandmine", "name" : "getInformation"}
-            ]
-      },
-      "event" : {
+    "name" : "registry pico events only",
+    "query" : {
         "allow" : [
-          { "domain" : "safeandmine", "type" : "notify" }
-          , { "domain" : "safeandmine", "type" : "tag_register_response" }
-          ]
-      }
+          { "rid" : "io.picolabs.safeandmine", "name" : "getInformation"}
+        ]
+    },
+    "event" : {
+      "allow" : [
+        { "domain" : "safeandmine", "name" : "notify" }, 
+        { "domain" : "safeandmine", "name" : "tag_register_response" }
+      ]
     }
+  }
     
     META_FIELD_LENGTH = 100
     MESSAGE_CHAR_LENGTH = 250
@@ -207,8 +207,13 @@ ruleset io.picolabs.safeandmine {
     select when safeandmine new_tag_channel
     pre {
       channel_tag = event:attr("domain") + "/" + event:attr("tagID");
+      
+      event_policy = { "allow": policy{["event", "allow"]}, "deny": [] };
+      query_policy = { "allow": policy{["query", "allow"]}, "deny": [] };
     }
-    wrangler:createChannel([channel_tag], policy{"query"}, policy{"event"}) setting(channel)
+    
+    wrangler:createChannel([channel_tag], query_policy, event_policy) setting(channel)
+    
     fired {
       ent:tag_channel_eci := channel{"id"}
     }
@@ -316,7 +321,7 @@ ruleset io.picolabs.safeandmine {
       picoId = meta:picoId;
       app = "SafeAndMine";
       rid = meta:rid;
-      name = Wrangler:name();
+      name = wrangler:name();
       message = "Your tag " + tagID + " has been scanned";
       attrs = { 
         "picoId" : picoId,
