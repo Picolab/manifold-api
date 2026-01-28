@@ -345,7 +345,6 @@ ruleset io.picolabs.safeandmine {
       app = "SafeAndMine";
       rid = meta:rid;
       name = wrangler:name();
-      name = wrangler:name();
       message = "Your tag " + tagID + " has been scanned";
       attrs = { 
         "picoId" : picoId,
