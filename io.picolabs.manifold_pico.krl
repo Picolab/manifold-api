@@ -69,7 +69,7 @@ ruleset io.picolabs.manifold_pico {
     }
 
     isAChild = function(picoID) {
-      children = wrangler:children().klog("Children in isAChild()");
+      children = wrangler:children() // .klog("Children in isAChild()");
       childIDs = children.map(function(child) {
         child{"eci"}
       });
