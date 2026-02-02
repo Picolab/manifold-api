@@ -30,6 +30,8 @@ The following files have been reviewed and updated for Pico Engine 1.0 compatibi
 
 - ✅ **`io.picolabs.new_tag_registry.krl`** - Refactored for Pico Engine version 1.0 compatibility.
 
+- ✅ **`io.picolabs.manifold_bootstrap.krl`** - Bootstrap automation for the root pico. Install on the root pico to run the full Manifold bootstrap sequence automatically (tag registry, owner, Manifold child, and tag server registration).
+
 ## Files Pending Review
 
 The following files have **not yet** been reviewed for Pico Engine 1.0 compatibility and may need updates:
@@ -62,6 +64,16 @@ The following files have **not yet** been reviewed for Pico Engine 1.0 compatibi
 This directory contains the KRL (Kynetx Rules Language) rulesets used by the Manifold application. These rulesets define the behavior of Pico devices in the Manifold ecosystem.
 
 ## Bootstrap Process
+
+### Automated Bootstrap: `io.picolabs.manifold_bootstrap`
+
+**`io.picolabs.manifold_bootstrap`** automates the full bootstrap. Install this ruleset on the **root pico** to run the sequence automatically:
+
+1. Create a tag registry child pico and install `io.picolabs.new_tag_registry`.
+2. Create an owner child pico and install `io.picolabs.profile` and `io.picolabs.manifold_owner` (which in turn creates the Manifold child and installs `io.picolabs.manifold_pico`).
+3. Register the tag registry's registration ECI with the owner by raising `manifold:new_tag_server` on the owner, so things can use the tag registry.
+
+All steps follow the bootstrap architecture below. The ruleset creates a **bootstrap** channel on the root pico; use it to query `getBootstrapStatus()` for the tag registry, registration, and owner ECIs.
 
 ### Bootstrap Architecture (Three-Part Initialization)
 
@@ -147,34 +159,23 @@ These are provided by the pico engine and don't need to be installed separately:
 
 ## Quick Start Guide
 
-### Option 1: Manual Installation (via pico engine UI)
+### Option 1: One-step bootstrap (recommended)
 
-1. Start your pico engine and use your **root pico** as the top-level parent.
-2. **Tag registry**: Create a child pico (e.g. "Tag Registry") and install `io.picolabs.new_tag_registry` in it.
-3. **Owner**: Create a child pico (e.g. "Owner") and install in order:
-   ```
-   io.picolabs.profile
-   io.picolabs.manifold_owner
-   ```
-4. The Manifold child pico will be created automatically under the owner pico.
-5. **Before creating any things**: Raise `manifold:new_tag_server` on the owner pico with the tag registry's `registration` ECI so it is stored for tag registry access.
+1. Start your pico engine with the **root pico** as the top-level parent.
+2. Install **`io.picolabs.manifold_bootstrap`** on the root pico (from the same ruleset URL/path as your other Manifold rulesets).
+3. The ruleset creates the tag registry and owner children, installs the required rulesets, and registers the tag server. No further manual steps are needed.
+4. Query `getBootstrapStatus()` on the root pico's **bootstrap** channel. The result shows the ECIs for the tag registry (two: the tag registry pico's ECI and its registration channel ECI) and the owner pico.
 
 ### Option 2: Programmatic Installation (via API)
 
-Create a tag registry child and an owner child under the root pico, install rulesets on each, then raise `manifold:new_tag_server` on the owner with the registry's `registration` ECI before creating any things. Use wrangler events to create children and `install_ruleset_request` with `absoluteURL` for ruleset installation.
-
-### Option 3: Using KRL Developer UI
-
-1. Register the rulesets in your pico engine.
-2. From the **root pico**: create a tag registry child pico and install `io.picolabs.new_tag_registry`; create an owner child pico and install `io.picolabs.profile` and `io.picolabs.manifold_owner`.
-3. The initialization rule on the owner pico will automatically create the Manifold child pico.
-4. Raise `manifold:new_tag_server` on the owner pico with the tag registry's `registration` ECI before creating any things.
+A call to `<engine-url>/api/ui-context` returns an ECI that can be used to install the ruleset programmatically. Use that ECI with wrangler events to install `io.picolabs.manifold_bootstrap` on the root pico (e.g. `install_ruleset_request` with `absoluteURL`). Alternatively, create a tag registry child and an owner child under the root pico, install rulesets on each, then raise `manifold:new_tag_server` on the owner with the registry's `registration` ECI before creating any things.
 
 ## Ruleset Architecture
 
 ### Core Rulesets
 
-- **`io.picolabs.manifold_owner`** - Owner/root pico ruleset that manages the Manifold child pico
+- **`io.picolabs.manifold_bootstrap`** - Root pico ruleset that automates the full Manifold bootstrap (tag registry, owner, Manifold child, and tag server registration). Install on the root pico only.
+- **`io.picolabs.manifold_owner`** - Owner pico ruleset that manages the Manifold child pico
 - **`io.picolabs.manifold_pico`** - Core Manifold functionality (thing/community management)
 - **`io.picolabs.thing`** - Base ruleset for "things" (installed on thing child picos)
 - **`io.picolabs.community`** - Base ruleset for "communities" (installed on community child picos)
