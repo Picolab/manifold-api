@@ -168,7 +168,7 @@ These are provided by the pico engine and don't need to be installed separately:
 
 ### Option 2: Programmatic Installation (via API)
 
-A call to `<engine-url>/api/ui-context` returns an ECI that can be used to install the ruleset programmatically. Use that ECI with wrangler events to install `io.picolabs.manifold_bootstrap` on the root pico (e.g. `install_ruleset_request` with `absoluteURL`). Alternatively, create a tag registry child and an owner child under the root pico, install rulesets on each, then raise `manifold:new_tag_server` on the owner with the registry's `registration` ECI before creating any things.
+A call to `<engine-url>/api/ui-context` returns an ECI that can be used to install the ruleset programmatically. Use that ECI with wrangler events to install `io.picolabs.manifold_bootstrap` on the root pico (e.g. `install_ruleset_request` with `absoluteURL`). 
 
 ## Ruleset Architecture
 
