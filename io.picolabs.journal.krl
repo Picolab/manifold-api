@@ -1,18 +1,10 @@
 ruleset io.picolabs.journal {
   meta {
-    shares __testing, getEntry
+    shares getEntry
   }
   
   global {
-    __testing = { "queries":
-      [ { "name": "__testing" }
-      , { "name": "getEntry", "args": [ "title" ] }
-      ] , "events":
-      [ { "domain": "journal", "type": "new_entry", "attrs": [ "title", "content" ] }
-      , { "domain": "journal", "type": "delete_entry", "attrs": [ "timestamp" ] }
-      , { "domain": "journal", "type": "edit_entry", "attrs": [ "timestamp", "newContent" ] }
-      ]
-    }
+
     
     getEntry = function(title) {
       (title) => ent:entries.filter(function(x){
