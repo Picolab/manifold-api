@@ -1,5 +1,11 @@
-ruleset io.picolabs.manifold.skill_directory {
+ruleset io.picolabs.manifold.skills_registry {
   meta {
+    description <<
+      Skills registry for Manifold. Maintains a directory of skills that can
+      be added to things, keyed by skill name. Each entry records the skill
+      name, KRL ruleset ID, an optional ruleset URL, and a map of MCP tool
+      definitions. Install on a dedicated Skills Registry pico.
+    >>
     use module io.picolabs.wrangler alias wrangler
     shares getSkills
   }
@@ -51,7 +57,7 @@ ruleset io.picolabs.manifold.skill_directory {
   rule createChannel {
     select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
     pre {
-      channelName  = "skill_directory"
+      channelName  = "skills_registry"
       eventPolicy  = {"allow": [{"domain": "manifold", "name": "new_skill_available"},
                                 {"domain": "manifold", "name": "remove_skill"}],
                       "deny":  []}

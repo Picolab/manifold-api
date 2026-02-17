@@ -8,6 +8,9 @@ ruleset io.picolabs.manifold_bootstrap {
          (which in turn creates the Manifold child and installs io.picolabs.manifold_pico).
       3) Register the tag registry's registration ECI with the owner by raising
          manifold:new_tag_server on the owner, so things can use the tag registry.
+      4) Create a skills registry child pico and install io.picolabs.manifold.skills_registry,
+         providing a queryable directory of skills (with MCP tool definitions) that can
+         be added to things.
       All steps follow the bootstrap architecture described in the Manifold-api README.
     >>
     use module io.picolabs.wrangler alias wrangler
@@ -17,14 +20,17 @@ ruleset io.picolabs.manifold_bootstrap {
   global {
     tag_registry_name = "Tag Registry"
     owner_name = "Owner"
+    skills_registry_name = "Skills Registry"
     init_event_type_tag_registry = "manifold_init_tag_registry"
     init_event_type_owner = "manifold_init_owner"
+    init_event_type_skills_registry = "manifold_init_skills_registry"
 
     getBootstrapStatus = function() {
       {
         "tag_registry_eci": ent:tag_registry_eci,
         "tag_registry_registration_eci": ent:tag_registry_registration_eci,
-        "owner_eci": ent:owner_eci
+        "owner_eci": ent:owner_eci,
+        "skills_registry_eci": ent:skills_registry_eci
       }
     }
   }
@@ -114,6 +120,48 @@ ruleset io.picolabs.manifold_bootstrap {
           "color": "#7FFFD4",
           "event_type": init_event_type_owner
         }
+    }
+  }
+
+  // ---- Skills Registry: create pico and install skills_registry ruleset (independent of owner steps) ----
+  rule create_skills_registry {
+    select when wrangler ruleset_installed
+      where event:attr("rids") >< ctx:rid
+    pre {
+      children = wrangler:children();
+      skills_registry_exists = children.any(function(c) { c{"name"} == skills_registry_name });
+    }
+    if not skills_registry_exists then
+      send_directive("manifold_init_started", {"step": "creating_skills_registry"})
+    fired {
+      raise wrangler event "new_child_request"
+        attributes {
+          "name": skills_registry_name,
+          "color": "#B0E0E6",
+          "event_type": init_event_type_skills_registry
+        }
+    }
+  }
+
+  rule install_skills_registry_ruleset {
+    select when wrangler child_initialized
+      where event:attr("event_type") == init_event_type_skills_registry
+    pre {
+      eci = event:attr("eci");
+      absoluteURL = meta:rulesetURI;
+    }
+    if eci && absoluteURL then
+      event:send({
+        "eci": eci,
+        "domain": "wrangler",
+        "type": "install_ruleset_request",
+        "attrs": {
+          "rid": "io.picolabs.manifold.skills_registry",
+          "absoluteURL": absoluteURL
+        }
+      })
+    fired {
+      ent:skills_registry_eci := eci
     }
   }
 
