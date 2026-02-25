@@ -2,7 +2,7 @@ ruleset io.picolabs.manifold_owner {
   meta {
     use module io.picolabs.subscription alias Subscriptions
     use module io.picolabs.wrangler alias wrangler
-    shares getManifoldPico, getManifoldPicoEci, getTagServer
+    shares getManifoldPico, getManifoldPicoEci, getTagServer, getLLMContext
   }
   global {
 
@@ -44,7 +44,23 @@ ruleset io.picolabs.manifold_owner {
     getTagServer = function() {
       ent:tag_pico
     }
+
+    getLLMContext = function() {
+      ent:llm_context.defaultsTo({})
+    }
   } //end global
+
+  rule store_llm_context {
+    select when manifold updated_context
+    pre {
+      context = event:attr("context")
+    }
+    if context then
+      send_directive("llm context stored", {})
+    fired {
+      ent:llm_context := context
+    }
+  }
 
   rule configure_tag_server {
     select when manifold new_tag_server
@@ -127,6 +143,32 @@ ruleset io.picolabs.manifold_owner {
       wrangler:createChannel([channelName], eventPolicy, queryPolicy) setting(channel)
     fired {
       ent:init_channel_eci := channel{"id"}
+    }
+  }
+
+  rule createUpdateChannel {
+    select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
+    pre {
+      channelName = "updates"
+      eventPolicy = {"allow": [{"domain": "manifold", "name": "updated_context"},
+                               {"domain": "profile",  "name": "*"}],
+                     "deny":  []}
+      queryPolicy = {"allow": [{"rid": meta:rid,              "name": "getLLMContext"},
+                               {"rid": "io.picolabs.profile", "name": "getProfile"},
+                               {"rid": "io.picolabs.profile", "name": "getOther"},
+                               {"rid": "io.picolabs.profile", "name": "getSection"},
+                               {"rid": "io.picolabs.profile", "name": "availableSection"},
+                               {"rid": "io.picolabs.profile", "name": "unFavAll"},
+                               {"rid": "io.picolabs.profile", "name": "getContacts"}],
+                     "deny":  []}
+      existing     = wrangler:channels()
+      app_channel  = existing.filter(function(chan) { chan{"name"} == channelName })
+      channel_exists = app_channel.length() > 0
+    }
+    if not channel_exists then
+      wrangler:createChannel([channelName], eventPolicy, queryPolicy) setting(channel)
+    fired {
+      ent:updated_channel_eci := channel{"id"}
     }
   }
 
