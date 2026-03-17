@@ -21,10 +21,18 @@ The following files have been reviewed and updated for Pico Engine 1.0 compatibi
   - Updated channel creation to use synchronous `wrangler:createChannel()` action
   - Uses `meta:rulesetURI` for absolute URL derivation
   - Fixed event attribute references (`rid` instead of `rids`)
+  - Added `createCommunity` rule (trigger: `manifold:new_community` with `name` and optional `description`)
+  - Added `install_community_ruleset` rule for community child pico setup
+  - Added `addThingToCommunity` rule (trigger: `manifold:add_thing_to_community` with `thingPicoID` and `communityPicoID`)
+  - Added `getCommunities` shared function
 
 - ✅ **`io.picolabs.profile.krl`** - Updated for Pico Engine 1.0 compatibility
 
-- ✅ **`io.picolabs.thing.krl`** - Updated for Pico Engine 1.0 compatibility
+- ✅ **`io.picolabs.thing.krl`** - Updated for Pico Engine 1.0 compatibility; community support added:
+  - `communities()` function lists all communities the thing belongs to (via `subscription:established()`, enriched with name and description)
+  - `autoAcceptCommunity` — auto-approves inbound subscriptions where `Rx_role == "community"`
+  - `communityAdded` / `communityRemoved` — maintain `ent:communityInfo` cache
+  - `notifyCommunity` rule — trigger `thing:community_notify` (with `domain`, `type`, `attrs`) to forward an event to all member communities
 
 - ✅ **`io.picolabs.safeandmine.krl`** - Partially updated for Pico Engine 1.0 compatibility. Tags are not yet working.
 
@@ -32,11 +40,19 @@ The following files have been reviewed and updated for Pico Engine 1.0 compatibi
 
 - ✅ **`io.picolabs.manifold_bootstrap.krl`** - Bootstrap automation for the root pico. Install on the root pico to run the full Manifold bootstrap sequence automatically (tag registry, owner, Manifold child, and tag server registration).
 
+- ✅ **`io.picolabs.community.krl`** - Updated for Pico Engine 1.0 compatibility; full community/thing subscription system:
+  - `things()` function lists all member things (via `subscription:established()`, enriched with name)
+  - `autoAcceptManifold` / `autoAcceptThing` — auto-approves inbound subscriptions from manifold and things
+  - `addThing` rule — trigger `community:add_thing` with `eci` to subscribe a thing to this community
+  - `thingAdded` / `thingRemoved` — maintain `ent:thingInfo` cache
+  - `broadcastThingEvent` — on `community:thing_event_occurred`, broadcasts to all things except the sender
+  - `raiseThingEvent` / `raiseAllThingsEvent` — send events to one or all member things
+  - `setDescription` / `description()` — store/retrieve optional community description (trigger: `community:new_description`)
+  - `addEventSequence` / `removeEventSequence` — manage community event sequences
+
 ## Files Pending Review
 
 The following files have **not yet** been reviewed for Pico Engine 1.0 compatibility and may need updates:
-- ⚠️ `io.picolabs.community.krl`
-- ⚠️ `io.picolabs.collection.krl`
 - ⚠️ `io.picolabs.notifications.krl`
 - ⚠️ `io.picolabs.prowl_notifications.krl`
 - ⚠️ `io.picolabs.twilio_notifications.krl`
@@ -51,7 +67,6 @@ The following files have **not yet** been reviewed for Pico Engine 1.0 compatibi
 - ⚠️ `io.picolabs.alexa.krl`
 - ⚠️ `io.picolabs.google_assistant.krl`
 - ⚠️ `io.picolabs.weather.krl`
-- ⚠️ `io.picolabs.community_thing.krl`
 - ⚠️ `io.picolabs.manifold_import.krl`
 - ⚠️ `org.sovrin.manifold_cloud_agent.krl`
 - ⚠️ `aurora_api.krl`

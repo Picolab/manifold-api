@@ -4,15 +4,7 @@ ruleset io.picolabs.profile {
     use module io.picolabs.wrangler alias wrangler
   }
   global {
-    __testing = { "queries":
-      [ { "name": "__testing" }, {"name": "unFavAll"}, {"name": "getContacts"}
-      , { "name": "getOther" }
-      ] , "events":
-      [ {"domain": "profile", "type": "other_profile_save", "attrs": ["service", "contact"]}//{ "domain": "d1", "type": "t1" }
-      //, { "domain": "d2", "type": "t2", "attrs": [ "a1", "a2" ] }
-      ]
-    }
-
+ 
     getProfile = function() {
       ent:profile
     }

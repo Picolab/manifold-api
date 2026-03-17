@@ -2,8 +2,8 @@ ruleset io.picolabs.manifold_pico {
   meta {
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
-    shares getManifoldInfo, isAChild, getThings, getTagServer
-    provides getManifoldInfo, getThings
+    shares getManifoldInfo, isAChild, getThings, getCommunities, getTagServer
+    provides getManifoldInfo, getThings, getCommunities
   }//end meta
 
   global {
@@ -190,21 +190,84 @@ ruleset io.picolabs.manifold_pico {
   }
 
   rule createCommunity {
-    select when manifold create_community
-    if event:attr("name") then every {
-      send_directive("Attempting to create new Community",{"community":event:attr("name")})
-    }
-    fired{
+    select when manifold new_community
+    if event:attr("name") && wrangler:children().length() <= max_picos then
+      send_directive("Attempting to create new Community", {"community": event:attr("name"), "description": event:attr("description")})
+    fired {
       raise wrangler event "new_child_request"
-        attributes event:attrs.put({"event_type": "manifold_create_community"})
-                                .put({"rids": communityRids})
+        attributes event:attrs.put({"event_name": "manifold_new_community"})
     }
   }
 
+  rule install_community_ruleset {
+    select when wrangler child_initialized where event:attr("event_name") == "manifold_new_community"
+    pre {
+      absoluteURL = meta:rulesetURI;
+      child_eci = event:attr("eci");
+    }
+    if child_eci && absoluteURL then
+      event:send({
+        "eci": child_eci,
+        "domain": "wrangler",
+        "type": "install_ruleset_request",
+        "attrs": {
+          "rid": "io.picolabs.community",
+          "absoluteURL": absoluteURL
+        }
+      })
+  }
+
   rule communityCompleted {
-    select when wrangler child_initialized
-      where event:name == "manifold_create_community" 
-    initiate_subscription(event:attr("eci"), event:attr("name"), subscription:wellKnown_Rx(){"id"}, community_role);
+    select when wrangler child_initialized where event:attr("event_name") == "manifold_new_community"
+    pre {
+      eci = event:attr("eci");
+      wellKnown = subscription:wellKnown_Rx(){"id"};
+      picoID = eci;
+      description = event:attr("description");
+    }
+    every {
+      event:send({
+        "eci": eci,
+        "eid": "subscription",
+        "domain": "wrangler",
+        "type": "subscription",
+        "attrs": {
+          "name"        : event:attr("name"),
+          "picoID"      : picoID,
+          "Rx_role"     : community_role,
+          "Tx_role"     : "manifold_pico",
+          "Tx_Rx_Type"  : "Manifold",
+          "channel_type": "Manifold",
+          "wellKnown_Tx": wellKnown,
+          "Tx_host"     : meta:host
+        }
+      });
+      event:send({
+        "eci": eci,
+        "eid": "set_description",
+        "domain": "community",
+        "type": "new_description",
+        "attrs": { "description": description }
+      })
+    }
+  }
+
+  rule addThingToCommunity {
+    select when manifold add_thing_to_community
+    pre {
+      thingPicoID = event:attr("thingPicoID");
+      communityPicoID = event:attr("communityPicoID");
+      commSub = subscription:established("Id", ent:communities.defaultsTo({}){[communityPicoID, "subID"]})[0];
+      thingSub = subscription:established("Id", ent:things.defaultsTo({}){[thingPicoID, "subID"]})[0];
+      community_eci = commSub{"Tx"};
+      thing_eci = thingSub{"Tx"};
+    }
+    if community_eci && thing_eci then
+      event:send({
+        "eci": community_eci, "eid": "add_thing_to_community",
+        "domain": "community", "type": "add_thing",
+        "attrs": { "eci": thing_eci }
+      })
   }
 
   rule trackCommSubscription {
@@ -263,8 +326,8 @@ ruleset io.picolabs.manifold_pico {
     select when manifold remove_community
     pre {
       picoID = event:attr("picoID");
-      subID = subIDFromPicoID(picoID, ent:things).klog("found subID: ");
-      sub = subscription:established("Id", event:attr("subID"))[0].klog("found sub: ");
+      subID = subIDFromPicoID(picoID, ent:communities).klog("found subID: ");
+      sub = subscription:established("Id", subID)[0].klog("found sub: ");
     }
     if picoID && subID && sub then
       send_directive("Attempting to cancel subscription to Community", {"community":event:attr("name")})
