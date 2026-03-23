@@ -66,7 +66,11 @@ ruleset io.picolabs.thing {
 
   rule notifyCommunity {
     select when thing community_notify
-    foreach communities() setting(com)
+    // if community_eci is provided, notify only that community; otherwise notify all
+    foreach communities().filter(function(com) {
+      community_eci = event:attr("community_eci");
+      community_eci.isnull() || com{"Tx"} == community_eci
+    }) setting(com)
     pre {
       domain = event:attr("domain")
       type = event:attr("type")
