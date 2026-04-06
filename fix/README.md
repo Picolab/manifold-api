@@ -25,3 +25,10 @@ During the demo,
 use the new channel to send the `demo_fixer fix_requested` event to the Manifold pico.
 
 - refresh the pico engine overview page to see the pico in the hard-coded place.
+
+## Screenshots
+### Installing the ruleset:
+<img width="1996" height="1620" alt="Screenshot 2026-04-06 at 13 46 34" src="https://github.com/user-attachments/assets/86750703-c1d1-427c-a97b-5b40d15a91fd" />
+
+### Sending the event to fix the position
+<img width="1698" height="1496" alt="Screenshot 2026-04-06 at 13 47 27" src="https://github.com/user-attachments/assets/2f9ed4a5-5ba9-4811-a801-ff07a63cd81c" />
