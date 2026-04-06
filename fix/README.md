@@ -11,3 +11,15 @@ We will create a ruleset which can be installed in the Manifold pico. It will li
 creation and deletion of a thing pico.
 
 It will provide a rule to move the latest created thing pico into a hard-coded space.
+
+## Usage
+Before demo, 
+- install [the ruleset](https://raw.githubusercontent.com/Picolab/MCPforEXP/refs/heads/main/Manifold-api/fix/io.picolabs.MCPforEXP.demo-fixer.krl) in the Manifold pico.
+
+- add a new channel that allows `demo_fixer:*` events.
+
+During the demo,
+- fter the new thing pico is created,
+use the new channel to send the `demo_fixer fix_requested` event to the Manifold pico.
+
+- refresh the pico engine overview page to see the pico in the hard-coded place.
