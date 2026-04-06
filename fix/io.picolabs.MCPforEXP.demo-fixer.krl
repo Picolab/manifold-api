@@ -32,4 +32,17 @@ ruleset io.picolabs.MCPforEXP.demo-fixer.krl {
           }
         })
   }
+  rule initialize {
+    select when wrangler ruleset_installed
+          where event:attr("rids") >< meta:rid
+    pre {
+      tags = "demo-fixer"
+    }
+    if wrangler:channels(tags).length() == 0 then
+      wrangler:createChannel(
+        tags,
+        {"allow":[{"domain":"demo_fixer","name":"*"}],"deny":[]},
+        {"allow":[{"rid":meta:rid,"name":"*"}],"deny":[]}
+      ) setting(channel)
+  }
 }
