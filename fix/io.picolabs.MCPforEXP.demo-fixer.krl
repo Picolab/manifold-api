@@ -37,7 +37,7 @@ ruleset io.picolabs.MCPforEXP.demo-fixer.krl {
     select when wrangler ruleset_installed
           where event:attr("rids") >< meta:rid
     pre {
-      tags = "demo-fixer"
+      tags = ["demo-fixer"]
     }
     if wrangler:channels(tags).length() == 0 then
       wrangler:createChannel(
