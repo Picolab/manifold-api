@@ -1,6 +1,7 @@
 ruleset io.picolabs.MCPforEXP.demo-fixer.krl {
   meta {
     use module io.picolabs.manifold_pico alias manifold
+    use module io.picolabs.wrangler alias wrangler
   }
   rule trackThingSubscription {
     select when wrangler subscription_added
