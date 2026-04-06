@@ -4,14 +4,21 @@ ruleset io.picolabs.MCPforEXP.demo-fixer.krl {
   }
   rule trackThingSubscription {
     select when wrangler subscription_added
-      where event:attr("Tx_role") == "manifold_thing"
+          where event:attr("Tx_role") == "manifold_thing"
     fired {
       ent:latestThingPico := event:attr("picoID")
     }
   }
+  rule trackThingDeletion {
+    select when wrangler subscription_removed
+          where event:attr("event_type") == "thing_deletion"
+    fired {
+      clear ent:latestThingPico
+    }
+  }
   rule fixThingPosition {
     select when demo_fixer fix_requested
-      where not ent:latestThingPico.isnull()
+          where not ent:latestThingPico.isnull()
     event:send({
           "eci": ent:latestThingPico, 
           "eid": "fix",
