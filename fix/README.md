@@ -34,5 +34,5 @@ use the new channel to send the `demo_fixer fix_requested` event to the Manifold
 <img width="1698" height="1496" alt="Screenshot 2026-04-06 at 13 47 27" src="https://github.com/user-attachments/assets/2f9ed4a5-5ba9-4811-a801-ff07a63cd81c" />
 
 ## Better and completely automated solution
-A much simpler ruleset solves the problem automatically.
+A much [simpler ruleset](https://github.com/Picolab/MCPforEXP/blob/main/Manifold-api/fix/io.picolabs.MCPforEXP.simple-fix.krl) solves the problem automatically.
 The `io.picolabs.MCPforEXP.simple-fix` ruleset has a single rule which reacts to the new child initialized event and moves the pico to a better place.
