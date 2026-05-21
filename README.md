@@ -1,58 +1,26 @@
-# Manifold KRL Rulesets
+# manifold-api
 
-**⚠️ Version 1.0 Pico Engine Update**
+KRL (Kynetx Rules Language) rulesets for [Manifold](https://manifold.picolabs.io/), updated for compatibility with Pico Engine version 1.0.
 
-This directory contains updated KRL (Kynetx Rules Language) rulesets for the Manifold application, updated for compatibility with **Pico Engine version 1.0**. These rulesets define the behavior of Pico devices in the Manifold ecosystem.
+Manifold is a platform built on the [pico engine](https://github.com/Picolab/pico-engine) that enables the creation and orchestration of pico-based systems. These rulesets define the behavior of pico devices in the Manifold ecosystem.
 
-## Updated Files (v1.0 Compatible)
+## Ruleset Status
 
-The following files have been reviewed and updated for Pico Engine 1.0 compatibility:
+### Updated for Pico Engine 1.0
 
-- ✅ **`io.picolabs.manifold_owner.krl`** - Updated to use modern Wrangler API:
-  - Removed deprecated `rids` attribute from `new_child_request`
-  - Updated to use `install_ruleset_request` (singular) with `absoluteURL` attribute
-  - Updated channel creation to use modern Wrangler patterns
-  - Uses `meta:rulesetURI` for absolute URL derivation
-  - Updated to set pico name to "owner" during initialization
+- ✅ **`io.picolabs.manifold_owner.krl`** — Uses modern Wrangler API; updated channel creation and ruleset installation patterns
+- ✅ **`io.picolabs.manifold_pico.krl`** — Uses `foreach` initialization, synchronous `wrangler:createChannel()`, `meta:rulesetURI` for URL derivation; includes `createCommunity`, `addThingToCommunity`, and `getCommunities`
+- ✅ **`io.picolabs.profile.krl`** — Updated for Pico Engine 1.0
+- ✅ **`io.picolabs.thing.krl`** — Community support: `communities()`, `autoAcceptCommunity`, `communityAdded`/`communityRemoved`, `notifyCommunity`
+- ✅ **`io.picolabs.safeandmine.krl`** — Partially updated; tags not yet working
+- ✅ **`io.picolabs.new_tag_registry.krl`** — Refactored for Pico Engine 1.0
+- ✅ **`io.picolabs.manifold_bootstrap.krl`** — One-step bootstrap automation for the root pico
+- ✅ **`io.picolabs.community.krl`** — Full community/thing subscription system: `things()`, `autoAcceptManifold`/`autoAcceptThing`, `addThing`, `broadcastThingEvent`, `addEventSequence`/`removeEventSequence`
 
-- ✅ **`io.picolabs.manifold_pico.krl`** - Updated to use modern Wrangler API:
-  - Added `initializationRids` array for self-contained initialization
-  - Updated initialization rule to use `foreach` with `install_ruleset_request` (singular)
-  - Updated channel creation to use synchronous `wrangler:createChannel()` action
-  - Uses `meta:rulesetURI` for absolute URL derivation
-  - Fixed event attribute references (`rid` instead of `rids`)
-  - Added `createCommunity` rule (trigger: `manifold:new_community` with `name` and optional `description`)
-  - Added `install_community_ruleset` rule for community child pico setup
-  - Added `addThingToCommunity` rule (trigger: `manifold:add_thing_to_community` with `thingPicoID` and `communityPicoID`)
-  - Added `getCommunities` shared function
+### Pending Review
 
-- ✅ **`io.picolabs.profile.krl`** - Updated for Pico Engine 1.0 compatibility
+These rulesets have not yet been reviewed for Pico Engine 1.0 compatibility:
 
-- ✅ **`io.picolabs.thing.krl`** - Updated for Pico Engine 1.0 compatibility; community support added:
-  - `communities()` function lists all communities the thing belongs to (via `subscription:established()`, enriched with name and description)
-  - `autoAcceptCommunity` — auto-approves inbound subscriptions where `Rx_role == "community"`
-  - `communityAdded` / `communityRemoved` — maintain `ent:communityInfo` cache
-  - `notifyCommunity` rule — trigger `thing:community_notify` (with `domain`, `type`, `attrs`) to forward an event to all member communities
-
-- ✅ **`io.picolabs.safeandmine.krl`** - Partially updated for Pico Engine 1.0 compatibility. Tags are not yet working.
-
-- ✅ **`io.picolabs.new_tag_registry.krl`** - Refactored for Pico Engine version 1.0 compatibility.
-
-- ✅ **`io.picolabs.manifold_bootstrap.krl`** - Bootstrap automation for the root pico. Install on the root pico to run the full Manifold bootstrap sequence automatically (tag registry, owner, Manifold child, and tag server registration).
-
-- ✅ **`io.picolabs.community.krl`** - Updated for Pico Engine 1.0 compatibility; full community/thing subscription system:
-  - `things()` function lists all member things (via `subscription:established()`, enriched with name)
-  - `autoAcceptManifold` / `autoAcceptThing` — auto-approves inbound subscriptions from manifold and things
-  - `addThing` rule — trigger `community:add_thing` with `eci` to subscribe a thing to this community
-  - `thingAdded` / `thingRemoved` — maintain `ent:thingInfo` cache
-  - `broadcastThingEvent` — on `community:thing_event_occurred`, broadcasts to all things except the sender
-  - `raiseThingEvent` / `raiseAllThingsEvent` — send events to one or all member things
-  - `setDescription` / `description()` — store/retrieve optional community description (trigger: `community:new_description`)
-  - `addEventSequence` / `removeEventSequence` — manage community event sequences
-
-## Files Pending Review
-
-The following files have **not yet** been reviewed for Pico Engine 1.0 compatibility and may need updates:
 - ⚠️ `io.picolabs.notifications.krl`
 - ⚠️ `io.picolabs.prowl_notifications.krl`
 - ⚠️ `io.picolabs.twilio_notifications.krl`
@@ -60,7 +28,6 @@ The following files have **not yet** been reviewed for Pico Engine 1.0 compatibi
 - ⚠️ `io.picolabs.manifold.text_message_notifications`
 - ⚠️ `io.picolabs.manifold.text_messenger.krl`
 - ⚠️ `io.picolabs.manifold.pico_mailer.krl`
-- ⚠️ `io.picolabs.manifold.smart_mirror.krl`
 - ⚠️ `io.picolabs.manifold.disk_space_monitor.krl`
 - ⚠️ `io.picolabs.google_signin.krl`
 - ⚠️ `io.picolabs.github_signin.krl`
@@ -68,244 +35,66 @@ The following files have **not yet** been reviewed for Pico Engine 1.0 compatibi
 - ⚠️ `io.picolabs.google_assistant.krl`
 - ⚠️ `io.picolabs.weather.krl`
 - ⚠️ `io.picolabs.manifold_import.krl`
-- ⚠️ `org.sovrin.manifold_cloud_agent.krl`
-- ⚠️ `aurora_api.krl`
 - ⚠️ `io.github.picolab.manifold_disk.krl`
 - ⚠️ `io.picolabs.neighborhood_temps`
-- ⚠️ `io.picolabs.wovyn_base`
 
----
+## Bootstrap
 
-This directory contains the KRL (Kynetx Rules Language) rulesets used by the Manifold application. These rulesets define the behavior of Pico devices in the Manifold ecosystem.
+### Option 1: Automated (recommended)
 
-## Bootstrap Process
+1. Start your pico engine with the root pico as the top-level parent.
+2. Install **`io.picolabs.manifold_bootstrap`** on the root pico.
+3. Query `getBootstrapStatus()` on the root pico's **bootstrap** channel to get the ECIs for the tag registry and owner pico.
 
-### Automated Bootstrap: `io.picolabs.manifold_bootstrap`
+### Option 2: Manual
 
-**`io.picolabs.manifold_bootstrap`** automates the full bootstrap. Install this ruleset on the **root pico** to run the sequence automatically:
+**Three-part initialization sequence:**
 
-1. Create a tag registry child pico and install `io.picolabs.new_tag_registry`.
-2. Create an owner child pico and install `io.picolabs.profile` and `io.picolabs.manifold_owner` (which in turn creates the Manifold child and installs `io.picolabs.manifold_pico`).
-3. Register the tag registry's registration ECI with the owner by raising `manifold:new_tag_server` on the owner, so things can use the tag registry.
-
-All steps follow the bootstrap architecture below. The ruleset creates a **bootstrap** channel on the root pico; use it to query `getBootstrapStatus()` for the tag registry, registration, and owner ECIs.
-
-### Bootstrap Architecture (Three-Part Initialization)
-
-1. **Tag registry pico** — Create a tag registry pico as a child of the **root pico**, and install the `io.picolabs.new_tag_registry` ruleset in it. This should create a channel called `registration`.
-
-2. **Owner pico** — Create a pico to represent the owner as a child of the **root pico**, and install the `io.picolabs.manifold_owner` ruleset in it. Installing `manifold_owner` in the owner pico initializes Manifold (creates an initialization channel, creates the Manifold child pico, etc.).
-
-3. **Tag server registration** — The tag registry's `registration` ECI must be stored in the owner pico by raising the `manifold:new_tag_server` event to the owner pico **before any things are created**. This initializes the tag server reference so the owner (and Manifold) can use the tag registry.
-
-### Primary Ruleset: `io.picolabs.manifold_owner`
-
-**`io.picolabs.manifold_owner`** is the primary entry point for bootstrapping a new Manifold instance. This ruleset is installed on the **owner pico**, which is a child of the root pico (not on the root pico itself).
-
-### Step-by-Step Bootstrap
-
-1. **Root pico setup**: On the root pico, create two child picos and install rulesets:
-   - Create a **tag registry** child pico and install `io.picolabs.new_tag_registry` in it.
-   - Create an **owner** child pico and install `io.picolabs.profile` and `io.picolabs.manifold_owner` in it.
-
-2. **Owner/Manifold initialization**: When `io.picolabs.manifold_owner` is installed on the owner pico, its `initialization` rule:
-   - Sets the owner pico name to "owner"
-   - Checks if a "Manifold" child pico already exists
-   - If not, creates a new child pico named "Manifold" (with no initial rulesets)
-
-3. **Manifold child setup**: After the Manifold child is created, the `install_manifold_pico_ruleset` rule:
-   - Installs `io.picolabs.manifold_pico` on the Manifold child
-   - Uses `meta:rulesetURI` to derive the absolute URL for ruleset installation
-
-4. **Manifold pico self-initialization**: When `io.picolabs.manifold_pico` is installed, its `initialization` rule:
-   - Installs all required rulesets from `initializationRids` array
-   - Creates the "Manifold" App channel if it doesn't exist
-
-5. **Tag server registration (required before creating things)**: Raise `manifold:new_tag_server` with the tag registry's `registration` ECI so it is stored in the owner pico. This must be done **before any things are created**.
-
-### Bootstrap Flow (v1.0)
+1. **Tag registry pico** — Create a child of the root pico; install `io.picolabs.new_tag_registry`. Note the `registration` channel ECI.
+2. **Owner pico** — Create a child of the root pico; install `io.picolabs.profile` and `io.picolabs.manifold_owner`. This automatically creates the Manifold child pico and installs `io.picolabs.manifold_pico`.
+3. **Tag server registration** — Raise `manifold:new_tag_server` with the tag registry's `registration` ECI to the owner pico **before creating any things**.
 
 ```
 Root Pico
-  │
-  ├─ Create Child: Tag Registry Pico
-  │   └─ Install: io.picolabs.new_tag_registry
-  │
-  └─ Create Child: Owner Pico
-       ├─ Install: io.picolabs.profile
-       └─ Install: io.picolabs.manifold_owner
-            │
-            │ (initialization rule fires)
-            │
-            ├─ Sets pico name to "owner"
-            │
-            └─ Creates Child: "Manifold" (empty, no rulesets)
-                 │
-                 │ (install_manifold_pico_ruleset rule fires)
-                 │
-                 └─ Installs: io.picolabs.manifold_pico
-                      │
-                      │ (manifold_pico initialization rule fires)
-                      │
-                      └─ Self-installs & creates "Manifold" App channel
-
-Before creating any things:
-  └─ Raise manifold:new_tag_server with registry's registration ECI
-     (stores it in owner pico for tag registry access)
+  ├─ Tag Registry Pico → io.picolabs.new_tag_registry
+  └─ Owner Pico → io.picolabs.profile + io.picolabs.manifold_owner
+       └─ Manifold Pico → io.picolabs.manifold_pico (auto-installed)
 ```
+
+## Core Rulesets
+
+| Ruleset | Installed On | Purpose |
+|---|---|---|
+| `io.picolabs.manifold_bootstrap` | Root pico | Automates full bootstrap |
+| `io.picolabs.manifold_owner` | Owner pico | Manages Manifold child pico |
+| `io.picolabs.manifold_pico` | Manifold pico | Thing/community management |
+| `io.picolabs.thing` | Thing picos | Base thing behavior |
+| `io.picolabs.community` | Community picos | Base community behavior |
+| `io.picolabs.profile` | Owner pico | User profile management |
+| `io.picolabs.new_tag_registry` | Tag registry pico | Tag registry |
 
 ## Dependencies
 
-### Owner Pico Dependencies
-The `io.picolabs.manifold_owner` ruleset requires:
-- `io.picolabs.wrangler` (standard pico engine module - for pico management)
-- `io.picolabs.subscription` (standard pico engine module - for subscriptions)
-- `io.picolabs.profile` (for owner profile management - typically installed with signin rulesets)
+All rulesets depend on standard pico engine modules provided by the engine itself:
+- `io.picolabs.wrangler` — pico management
+- `io.picolabs.subscription` — subscription management
 
-### Manifold Pico Dependencies
-The `io.picolabs.manifold_pico` ruleset requires:
-- `io.picolabs.wrangler` (standard pico engine module)
-- `io.picolabs.subscription` (standard pico engine module)
+## Accessing Manifold
 
-### Standard Pico Engine Modules
-These are provided by the pico engine and don't need to be installed separately:
-- `io.picolabs.wrangler` - Core pico management
-- `io.picolabs.subscription` - Subscription management
+After bootstrapping, access functionality via:
+- Sky Cloud queries: `GET /sky/cloud/{eci}/{ruleset}/{function}`
+- Sky Events: `POST /sky/event/{eci}/{eid}/{domain}/{type}`
 
-## Quick Start Guide
+## File Conventions
 
-### Option 1: One-step bootstrap (recommended)
-
-1. Start your pico engine with the **root pico** as the top-level parent.
-2. Install **`io.picolabs.manifold_bootstrap`** on the root pico (from the same ruleset URL/path as your other Manifold rulesets).
-3. The ruleset creates the tag registry and owner children, installs the required rulesets, and registers the tag server. No further manual steps are needed.
-4. Query `getBootstrapStatus()` on the root pico's **bootstrap** channel. The result shows the ECIs for the tag registry (two: the tag registry pico's ECI and its registration channel ECI) and the owner pico.
-
-### Option 2: Programmatic Installation (via API)
-
-A call to `<engine-url>/api/ui-context` returns an ECI that can be used to install the ruleset programmatically. Use that ECI with wrangler events to install `io.picolabs.manifold_bootstrap` on the root pico (e.g. `install_ruleset_request` with `absoluteURL`). 
-
-## Ruleset Architecture
-
-### Core Rulesets
-
-- **`io.picolabs.manifold_bootstrap`** - Root pico ruleset that automates the full Manifold bootstrap (tag registry, owner, Manifold child, and tag server registration). Install on the root pico only.
-- **`io.picolabs.manifold_owner`** - Owner pico ruleset that manages the Manifold child pico
-- **`io.picolabs.manifold_pico`** - Core Manifold functionality (thing/community management)
-- **`io.picolabs.thing`** - Base ruleset for "things" (installed on thing child picos)
-- **`io.picolabs.community`** - Base ruleset for "communities" (installed on community child picos)
-- **`io.picolabs.profile`** - User profile management
-
-### Notification Rulesets
-
-- **`io.picolabs.notifications`** - Core notification system
-- **`io.picolabs.prowl_notifications`** - Prowl push notifications
-- **`io.picolabs.twilio_notifications`** - Twilio SMS notifications
-- **`io.picolabs.manifold.email_notifications`** - Email notifications
-- **`io.picolabs.manifold.text_message_notifications`** - Text message notifications
-
-### Integration Rulesets
-
-- **`io.picolabs.google_signin`** - Google OAuth sign-in
-- **`io.picolabs.github_signin`** - GitHub OAuth sign-in
-- **`io.picolabs.alexa`** - Amazon Alexa integration
-- **`io.picolabs.google_assistant`** - Google Assistant integration
-
-### Application Rulesets
-
-- **`io.picolabs.weather`** - Weather app
-- **`io.picolabs.manifold.smart_mirror`** - Smart mirror app
-- **`org.sovrin.manifold_cloud_agent`** - Sovrin cloud agent
-- And many more...
-
-## Manifold Pico Initialization Details
-
-### Entity Variable Initialization
-
-The `io.picolabs.manifold_pico` ruleset uses **lazy initialization** for entity variables:
-
-- `ent:things` - Initialized as empty map `{}` on first access using `.defaultsTo({})`
-- `ent:communities` - Initialized as empty map `{}` on first access using `.defaultsTo({})`
-
-No explicit initialization rule is needed - variables are ready when first accessed.
-
-### Subscription Auto-Accept
-
-The `autoAcceptSubscriptions` rule automatically accepts subscriptions with `Tx_Rx_Type == "Manifold"`:
-
-```krl
-rule autoAcceptSubscriptions {
-  select when wrangler inbound_pending_subscription_added
-    where event:attr("rs_attrs"){"Tx_Rx_Type"} == "Manifold"
-  always {
-    raise wrangler event "pending_subscription_approval" 
-      attributes event:attrs;
-  }
-}
-```
-
-### Post-Initialization State
-
-After initialization, the Manifold pico:
-- ✅ Has all required rulesets installed
-- ✅ Has `ent:things` and `ent:communities` ready (empty maps, initialized on first access)
-- ✅ Has "Manifold" App channel created
-- ✅ Can accept subscriptions automatically
-- ✅ Can create things and communities
-- ✅ Is ready to receive events and queries
-
-## Testing the Bootstrap
-
-After installation, you can verify the bootstrap worked:
-
-1. **Check for Manifold child pico**:
-   ```javascript
-   GET /sky/cloud/{owner_eci}/io.picolabs.manifold_owner/getManifoldPico
-   ```
-   Expected: A pico object with the Manifold child pico details
-
-2. **Get Manifold info**:
-   ```javascript
-   GET /sky/cloud/{manifold_eci}/io.picolabs.manifold_pico/getManifoldInfo
-   ```
-   Expected: `{"things": {}, "communities": {}}`
-
-3. **Check installed rulesets**:
-   ```javascript
-   GET /sky/cloud/{manifold_eci}/io.picolabs.wrangler/installedRulesets
-   ```
-   Should include:
-   - `io.picolabs.manifold_pico`
-   - `io.picolabs.notifications`
-   - `io.picolabs.prowl_notifications`
-   - `io.picolabs.twilio_notifications`
-
-4. **Verify App channel exists**:
-   The "Manifold" App channel should be automatically created during initialization
-
-## Running Independently of GUI
-
-To run these rulesets independently of the React GUI:
-
-1. **Install on a pico engine**: These rulesets can run on any pico engine instance
-2. **No GUI dependencies**: The rulesets are self-contained and don't require the React application
-3. **API access**: Access functionality via:
-   - Sky Cloud queries: `GET /sky/cloud/{eci}/{ruleset}/{function}`
-   - Sky Events: `POST /sky/event/{eci}/{eid}/{domain}/{type}`
-   - EXP API (when implemented): `GET /exp/{eci}`
-
-## File Structure
-
-- All rulesets use the `.krl` extension
-- Ruleset IDs match the filename (e.g., `io.picolabs.manifold_owner.krl` has RID `io.picolabs.manifold_owner`)
-- Some rulesets have no extension (legacy format) but are still valid KRL
+- All rulesets use the `.krl` extension (some legacy files omit it but are valid KRL)
+- Ruleset IDs match the filename (e.g., `io.picolabs.manifold_owner.krl` → RID `io.picolabs.manifold_owner`)
 
 ## Contributing
 
-When contributing KRL rulesets, please ensure:
-- Rulesets follow KRL best practices
-- Rulesets are properly documented
-- Rulesets are tested before submission
-- Dependencies are clearly stated in the meta section
+When contributing KRL rulesets:
+- Follow KRL best practices
+- Document dependencies in the `meta` section
+- Note Pico Engine version compatibility
 
-For more information about KRL and Pico Labs, visit [PicoLabs.io](http://picolabs.io).
+For more information about KRL and Pico Labs, visit [picolabs.io](http://picolabs.io).
