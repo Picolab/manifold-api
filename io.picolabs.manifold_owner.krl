@@ -155,11 +155,10 @@ ruleset io.picolabs.manifold_owner {
                      "deny":  []}
       queryPolicy = {"allow": [{"rid": meta:rid,              "name": "getLLMContext"},
                                {"rid": "io.picolabs.profile", "name": "getProfile"},
-                               {"rid": "io.picolabs.profile", "name": "getOther"},
-                               {"rid": "io.picolabs.profile", "name": "getSection"},
-                               {"rid": "io.picolabs.profile", "name": "availableSection"},
-                               {"rid": "io.picolabs.profile", "name": "unFavAll"},
-                               {"rid": "io.picolabs.profile", "name": "getContacts"}],
+                               {"rid": "io.picolabs.profile", "name": "getEmail"},
+                               {"rid": "io.picolabs.profile", "name": "getPhone"},
+                               {"rid": "io.picolabs.profile", "name": "getOwnerPhone"},
+                               {"rid": "io.picolabs.profile", "name": "getOwnerEmail"}],
                      "deny":  []}
       existing     = wrangler:channels()
       app_channel  = existing.filter(function(chan) { chan{"name"} == channelName })

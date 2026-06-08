@@ -11,14 +11,14 @@ ruleset io.picolabs.community {
         sub{"Tx_role"} == "thing"
       }).map(function(sub) {
         cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-        name = cached{"name"} || wrangler:skyQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
+        name = cached{"name"} || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
         sub.put(cached).put({"name": name})
       })
     }
 
     queryThing = function(id, rid, func, params) {
       eci = subscription:established("picoID", id)[0]{"Tx"};
-      (eci) => wrangler:skyQuery(eci, rid, func, params.decode()) | null
+      (eci) => wrangler:picoQuery(eci, rid, func, params.decode()) | null
     }
 
     sequences = function() {
@@ -57,8 +57,16 @@ ruleset io.picolabs.community {
 
   rule autoAcceptThing {
     select when wrangler inbound_pending_subscription_added
-    if event:attr("Tx_Rx_Type") == "Community" then
-    noop()
+    pre {
+      // Tx_Rx_Type is set by addThing but may not survive the subscription
+      // handshake attrs; role pair is the reliable signal for thing members.
+      tx_rx_type = event:attr("Tx_Rx_Type")
+      rx_role = event:attr("Rx_role")
+      tx_role = event:attr("Tx_role")
+      is_thing_member = (tx_rx_type == "Community")
+                     || (rx_role == "community" && tx_role == "thing")
+    }
+    if is_thing_member then noop()
     fired {
       raise wrangler event "pending_subscription_approval"
         attributes event:attrs
@@ -101,30 +109,41 @@ ruleset io.picolabs.community {
     pre {
       thing_host = event:attr("host") || null
       thing_eci = event:attr("eci")
-      thing = wrangler:skyQuery(thing_eci, "io.picolabs.wrangler", "myself")
+      thing = wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself")
+      thing_id = thing{"id"}
+      query_ok = thing && thing{"picoQueryError"}.isnull() && thing_id
     }
-    if thing then
-    event:send({
-      "eci": thing_eci, "eid": "subscription",
-      "domain": "wrangler", "type": "subscription",
-      "attrs": {
-        "name"        : wrangler:myself(){"name"} + ":" + thing{"name"},
-        "picoID"      : thing{"id"},
-        "Rx_role"     : "thing",
-        "Tx_role"     : "community",
-        "Tx_Rx_Type"  : "Community",
-        "channel_type": "Community",
-        "wellKnown_Tx": subscription:wellKnown_Rx(){"id"},
-        "Tx_host"     : meta:host
-      }
-    }, host = thing_host);
+    if query_ok then every {
+      send_directive("requesting community-thing subscription", {
+        "thing_eci": thing_eci,
+        "thing_id": thing_id,
+        "thing_name": thing{"name"}
+      })
+      event:send({
+        "eci": thing_eci, "eid": "subscription",
+        "domain": "wrangler", "type": "subscription",
+        "attrs": {
+          "name"        : wrangler:myself(){"name"} + ":" + thing{"name"},
+          "picoID"      : thing_id,
+          "Rx_role"     : "thing",
+          "Tx_role"     : "community",
+          "Tx_Rx_Type"  : "Community",
+          "channel_type": "Community",
+          "wellKnown_Tx": subscription:wellKnown_Rx(){"id"},
+          "Tx_host"     : meta:host
+        }
+      }, host = thing_host)
+    }
+    notfired {
+      error warn <<add_thing failed: could not query thing at #{thing_eci}: #{thing.encode()}>>;
+    }
   }
 
   rule thingAdded {
     select when wrangler subscription_added
     pre {
       isCommunity = event:attr("Tx_role") == "thing"
-      thing = isCommunity => wrangler:skyQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself") | null
+      thing = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself") | null
     }
     if isCommunity && thing then noop()
     fired {

@@ -1,19 +1,8 @@
 ruleset io.picolabs.github_signin {
   meta {
     use module io.picolabs.github_keys
-
-    shares __testing
   }
   global {
-    __testing = { "queries":
-      [ { "name": "__testing" }
-      //, { "name": "entry", "args": [ "key" ] }
-      ] , "events":
-      [ //{ "domain": "github", "type": "test" }
-      //, { "domain": "d2", "type": "t2", "attrs": [ "a1", "a2" ] }
-      ]
-    }
-
     DID_Policy = {
         "name": "only allow github authorized_user events",
         "event": {

@@ -1,198 +1,70 @@
 ruleset io.picolabs.profile {
   meta {
-    shares __testing, getProfile, getOther, getSection, availableSection, unFavAll, getContacts
-    use module io.picolabs.wrangler alias wrangler
+    shares getProfile, getEmail, getPhone, getOwnerPhone, getOwnerEmail
   }
   global {
- 
+    // Recognized owner profile fields. Update events only touch these.
+    profile_fields = ["name", "email", "phone"];
+
     getProfile = function() {
-      ent:profile
+      ent:profile.defaultsTo({})
     }
 
-    getOther = function() {
-      ent:other
-    }
-    
-    getContacts = function() {
-      other = getOther();
-      profile = getProfile();
-      contacts = other.put(profile.keys()[0], profile{profile.keys()[0]});
-      contacts
+    getEmail = function() {
+      ent:profile{"email"}
     }
 
-    getSection = function(section) {
-      ent:other{section.lc()}
+    getPhone = function() {
+      ent:profile{"phone"}
     }
 
-    availableSection = function(section) {
-       (ent:other.isnull()) => true | (ent:other{section.lc()} != null) => false | true
+    // Aliases used by the Manifold notification platform (SMS / future Email).
+    getOwnerEmail = function() {
+      ent:profile{"email"}
     }
 
-    unFavAll = function() {
-      noFavs = ent:other.map(function(x) {
-        x.set("favorite", "false")
-      });
-      noFavs
+    getOwnerPhone = function() {
+      ent:profile{"phone"}
     }
-    
-    getManifoldPico = function() {
-      wrangler:children().filter(function(x) {
-        x{"name"} == "Manifold"
-      })[0]
+  }
+
+  // Set/update owner profile fields. Send `profile update` with any of
+  // {name, email, phone}; empty or missing values are left unchanged.
+  rule update_profile {
+    select when profile update
+    pre {
+      name = event:attr("name")
+      email = event:attr("email")
+      phone = event:attr("phone")
+      name_provided = not (name.isnull() || name == "")
+      email_provided = not (email.isnull() || email == "")
+      phone_provided = not (phone.isnull() || phone == "")
+      any_provided = name_provided || email_provided || phone_provided
     }
-    verifyEmail = defaction(email) {
-      manifoldPico = getManifoldPico();
-      event:send({
-        "eci": manifoldPico{"eci"}, 
-        "eid": "initialize_verification",
-        "domain": "email",
-        "type": "start_verification",
-        "attrs": {"email": email}
+    if any_provided then
+      send_directive("profile updated", {
+        "name": name_provided => name | null,
+        "email": email_provided => email | null,
+        "phone": phone_provided => phone | null
       })
-    }
-    verifyPhone = defaction(phone) {
-      manifoldPico = getManifoldPico();
-      event:send({
-        "eci": manifoldPico{"eci"}, 
-        "eid": "initialize_verification",
-        "domain": "text_messenger",
-        "type": "start_verification",
-        "attrs": {"phone": phone}
-      })
-    }
-    verifyBoth = defaction(email, phone) {
-      every {
-        verifyEmail(email)
-        verifyPhone(phone)
-      }
-    }
-  }
-
-  rule save_google_profile {
-    select when profile google_profile_save
-    pre {
-      profile = event:attr("profile") // .klog("profile")
-      googleProfile = {
-        "displayName" : profile["ig"] || profile{"dg"},
-        "firstName" : profile["ofa"] || profile{"a9"},
-        "lastName" : profile["wea"] || profile{"h7"},
-        "profileImgURL" : profile["Paa"] || profile{"xU"},
-        "email" : profile["U3"] || profile{"ez"},
-        "favorite": ent:profile{"google"}{"favorite"} == "true" => "true" | "false"
-      }
-    }
-    if event:attr("profile") then 
-    event:send({
-      "eci": getManifoldPico(){"eci"},
-      "eid": "google_verified",
-      "domain": "email",
-      "type": "save_verified_email",
-      "attrs": {"email": profile["U3"] || profile{"ez"}}
-    });
     fired {
-      ent:profile := ent:profile.defaultsTo({}).put("google", googleProfile);
+      ent:profile := ent:profile.defaultsTo({});
+      ent:profile{"name"} := name if name_provided;
+      ent:profile{"email"} := email if email_provided;
+      ent:profile{"phone"} := phone if phone_provided;
     }
   }
 
-  rule set_google_favorite {
-    select when profile google_set_fav
-    always {
-      ent:profile{["google","favorite"]} := ent:profile{["google","favorite"]}.defaultsTo("false")
-      if not ent:profile{"google"}.isnull();
-    }
-  }
-
-
-  rule save_github_profile {
-    select when profile github_profile_save
+  // Clear a single profile field. Send `profile clear` with attr `field`.
+  rule clear_profile_field {
+    select when profile clear
     pre {
-      profile = event:attrs{"profile"}
-      githubProfile = {
-        "displayName": profile["displayName"],
-        "name": profile["name"],
-        "profileImgURL": profile["profileImgURL"],
-        "email": profile["email"],
-        "favorite": ent:profile{"github"}{"favorite"} == "true" => "true" | "false"
-      }
+      field = event:attr("field")
     }
-    if event:attrs{"profile"} then 
-    event:send({
-      "eci": getManifoldPico(){"eci"},
-      "eid": "github_verified",
-      "domain": "email",
-      "type": "save_verified_email",
-      "attrs": {"email": profile["email"]}
-    });
+    if field && (profile_fields >< field) then
+      send_directive("profile field cleared", {"field": field})
     fired {
-      ent:profile := ent:profile.defaultsTo({}).put("github", githubProfile);
+      ent:profile := ent:profile.defaultsTo({}).delete([field])
     }
   }
-  
-  rule set_github_favorite {
-    select when profile github_set_fav
-    always {
-      ent:profile{["github","favorite"]} := ent:profile{["github","favorite"]}.defaultsTo("false")
-      if not ent:profile{"github"}.isnull();
-    }
-  }
-
-  rule save_other_profile {
-    select when profile other_profile_save
-    pre {
-      section = event:attr("section").klog("section").lc()
-      contacts = event:attrs.delete("section").decode().filter(function(v,k) {
-        v != "" && v != "undefined"
-      }).klog("contacts")
-      action = (contacts{"email"} && contacts{"phone"}) => "both"
-              | contacts{"email"} => "email"
-              | contacts{"phone"} => "phone"
-              | "none"
-    }
-    if section then choose action {
-      both => verifyBoth(contacts{"email"}, contacts{"phone"})
-      email => verifyEmail(contacts{"email"})
-      phone => verifyPhone(contacts{"phone"})
-      none => noop()
-    }
-    fired {
-      ent:other := ent:other.defaultsTo({}).put(section, contacts);
-    }
-  }
-
-  rule remove_other_profile {
-    select when profile other_profile_remove
-    pre {
-      section = event:attr("section").lc()
-    }
-    if section then noop()
-    fired {
-      ent:other := ent:other.delete(section).klog("delete");
-    }
-  }
-
-  rule change_favorite_other_profile {
-    select when profile other_profile_change_favorite
-    pre {
-      section = event:attr("section").lc()
-      value = event:attr("value")
-    }
-    if (ent:profile{section}.isnull()) then noop()
-    fired {
-      ent:other := unFavAll();
-      ent:other := ent:other.set([section, "favorite"], value);
-      ent:profile := ent:profile.set(["google", "favorite"], "false").klog("profile")
-      if not ent:profile{"google"}.isnull();
-      ent:profile := ent:profile.set(["github", "favorite"], "false").klog("profile")
-      if not ent:profile{"github"}.isnull();
-    }
-    else {
-      ent:other := (ent:other.isnull()) => {} | unFavAll();
-      ent:profile := ent:profile.set(["google", "favorite"], value).klog("profile")
-      if not ent:profile{"google"}.isnull();
-      ent:profile := ent:profile.set(["github", "favorite"], value).klog("profile")
-      if not ent:profile{"github"}.isnull();
-    }
-  }
-
-
 }

@@ -1,17 +1,7 @@
 ruleset io.picolabs.google_signin {
   meta {
-    shares __testing
   }
   global {
-    __testing = { "queries":
-      [ { "name": "__testing" }
-      //, { "name": "entry", "args": [ "key" ] }
-      ] , "events":
-      [ //{ "domain": "d1", "type": "t1" }
-      //, { "domain": "d2", "type": "t2", "attrs": [ "a1", "a2" ] }
-      ]
-    }
-
     DID_Policy = {
         "name": "only allow google owner_did_requested events",
         "event": {

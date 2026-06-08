@@ -29,7 +29,7 @@ ruleset io.picolabs.new_tag_registry {
     }
     
     if tagID && domain && notRegistered then 
-      event:send({"eci": did, "domain" : "safeandmine", "type" : "tag_register_response", "attrs" : { "tagID" : tagID, "domain" : domain, "DID" : did}}, pico_host);
+      event:send({"eci": did, "domain" : "safeandmine", "name" : "tag_register_response", "attrs" : { "tagID" : tagID, "domain" : domain, "DID" : did}}, pico_host);
     
     fired {
       ent:tag_store := ent:tag_store.defaultsTo({}).put([domain, tagID], map);

@@ -1,0 +1,23 @@
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.pnpm-store/
+*.log
+
+# TypeScript / build output
+dist/
+*.tsbuildinfo
+
+# Test harness runtime state
+t/.runtime.json
+t/.test-context.json
+
+# Archived rulesets (local reference only)
+OLD/
+
+# OS
+.DS_Store

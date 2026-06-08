@@ -1,0 +1,13 @@
+{
+  "repoName": "manifold-api",
+  "dockerImage": "picolabs/pico-engine:latest",
+  "mounts": [
+    {
+      "name": "manifold-api",
+      "hostPath": ".",
+      "containerPath": "/var/manifold-api",
+      "parseExclude": ["OLD/**", "fix/**"]
+    }
+  ],
+  "dependsOn": []
+}

@@ -91,9 +91,8 @@ ruleset io.picolabs.manifold_pico {
     }
 
     initializationRids = ["io.picolabs.notifications",
-                          "io.picolabs.prowl_notifications",
-                          "io.picolabs.twilio_notifications",
-                          "io.picolabs.manifold.email_notifications"
+                          "io.picolabs.twilio.sms",
+                          "io.picolabs.prowl"
                         ]
     
     appChannelName = "Manifold"
@@ -185,7 +184,60 @@ ruleset io.picolabs.manifold_pico {
     if subID && name && picoID then
       send_directive("Tracking subscription", { "info": obj_structure })
     fired {
-      ent:things := ent:things.defaultsTo({}).put([picoID], obj_structure);
+      ent:things := ent:things.defaultsTo({});
+      ent:things{picoID} := obj_structure;
+    }
+  }
+
+  // Thing-creation delegation: when a create_thing request carries both a
+  // callback_eci and a correlation id (rcn), remember them keyed by the new
+  // pico's eci so the delegating pico can be notified once the thing is ready.
+  // Requests without these attrs never populate this map, preserving the
+  // traditional Manifold flow unchanged.
+  rule stashThingCallback {
+    select when wrangler child_initialized where event:attr("event_name") == "manifold_create_thing"
+    pre {
+      eci = event:attr("eci");
+      callback_eci = event:attr("callback_eci");
+      rcn = event:attr("rcn");
+    }
+    if eci && callback_eci && rcn then
+      send_directive("Registering thing-creation callback", { "rcn": rcn })
+    fired {
+      ent:pending_callbacks := ent:pending_callbacks.defaultsTo({});
+      ent:pending_callbacks{eci} := {
+        "callback_eci": callback_eci,
+        "rcn": rcn
+      };
+    }
+  }
+
+  // Fire the delegation callback once the thing's manifold_thing subscription
+  // is established, but only when a callback was registered for this thing.
+  rule fireThingCreatedCallback {
+    select when wrangler subscription_added where event:attr("Tx_role") == thing_role
+    pre {
+      picoID = event:attr("picoID");
+      // The thing's subscription channel (this subscription's Tx) is usable by
+      // other picos. We must NOT hand back picoID, which is the parent/child
+      // (family) bootstrap channel that only the Manifold pico may use.
+      thing_eci = event:attr("Tx");
+      cb = ent:pending_callbacks.defaultsTo({}){picoID};
+    }
+    if cb then
+      event:send({
+        "eci": cb{"callback_eci"},
+        "eid": "thing_created",
+        "domain": "community",
+        "type": "thing_created",
+        "attrs": {
+          "rcn": cb{"rcn"},
+          "thingPicoID": picoID,
+          "thing_eci": thing_eci
+        }
+      })
+    fired {
+      ent:pending_callbacks := ent:pending_callbacks.filter(function(v, k) { k != picoID });
     }
   }
 
@@ -202,10 +254,13 @@ ruleset io.picolabs.manifold_pico {
   rule install_community_ruleset {
     select when wrangler child_initialized where event:attr("event_name") == "manifold_new_community"
     pre {
-      absoluteURL = meta:rulesetURI;
-      child_eci = event:attr("eci");
+      absoluteURL = meta:rulesetURI
+                   || wrangler:rulesetByRID("io.picolabs.manifold_pico"){"url"}
+      child_eci = event:attr("eci")
     }
-    if child_eci && absoluteURL then
+    if child_eci && absoluteURL then every {
+      send_directive("installing io.picolabs.community on new community",
+                     {"child_eci": child_eci, "absoluteURL": absoluteURL})
       event:send({
         "eci": child_eci,
         "domain": "wrangler",
@@ -215,6 +270,10 @@ ruleset io.picolabs.manifold_pico {
           "absoluteURL": absoluteURL
         }
       })
+    }
+    notfired {
+      error warn <<install_community_ruleset skipped: child_eci=#{child_eci} absoluteURL=#{absoluteURL}>>;
+    }
   }
 
   rule communityCompleted {
@@ -270,6 +329,27 @@ ruleset io.picolabs.manifold_pico {
       })
   }
 
+  rule removeThingFromCommunity {
+    select when manifold remove_thing_from_community
+    pre {
+      thingPicoID = event:attr("thingPicoID");
+      communityPicoID = event:attr("communityPicoID");
+      commSub = subscription:established("Id", ent:communities.defaultsTo({}){[communityPicoID, "subID"]})[0];
+      thingSub = subscription:established("Id", ent:things.defaultsTo({}){[thingPicoID, "subID"]})[0];
+      community_eci = commSub{"Tx"};
+      thing_eci = thingSub{"Tx"};
+      member_subs = thing_eci => wrangler:picoQuery(thing_eci, "io.picolabs.thing", "communities", {}) | [];
+      community_member_sub = member_subs.filter(function(s) { s{"Tx_role"} == "community" }).head();
+    }
+    if community_member_sub && thing_eci then
+      event:send({
+        "eci": thing_eci,
+        "domain": "wrangler",
+        "type": "subscription_cancellation",
+        "attrs": { "Id": community_member_sub{"Id"} }
+      })
+  }
+
   rule trackCommSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
     pre {
@@ -286,7 +366,8 @@ ruleset io.picolabs.manifold_pico {
     if subID && name && picoID then
       send_directive("Tracking subscription", { "info": obj_structure })
     fired {
-      ent:communities := ent:communities.defaultsTo({}).put([picoID], obj_structure);
+      ent:communities := ent:communities.defaultsTo({});
+      ent:communities{picoID} := obj_structure;
     }
   }
 
@@ -345,8 +426,8 @@ ruleset io.picolabs.manifold_pico {
       send_directive("Attempting to remove Community", { "community": ent:communities{[picoID, "name"]}, "picoID": picoID })
     fired{
       ent:communities := ent:communities.filter(function(thing){ thing{"subID"} != event:attr("Id")});
-      raise wrangler event "child_deletion"
-        attributes { "id": picoID } //lowercase "id" is wrangler's way to delete a child by picoID
+      raise wrangler event "child_deletion_request"
+        attributes { "eci": picoID }
     }
   }
 
@@ -412,7 +493,7 @@ ruleset io.picolabs.manifold_pico {
       send_directive("THINGS", { "things list" : ent:things });
 
     fired {
-      ent:things := ent:things.put([picoID, "name"], changedName);
+      ent:things{[picoID, "name"]} := changedName;
     }
   }
 
@@ -465,10 +546,8 @@ ruleset io.picolabs.manifold_pico {
   rule updateManifoldVersion {
     select when manifold update_version
     foreach ["io.picolabs.notifications",
-             "io.picolabs.prowl_notifications",
-             "io.picolabs.twilio_notifications",
-             "io.picolabs.manifold.email_notifications",
-             "io.picolabs.manifold.text_message_notifications"].difference(wrangler:installedRulesets()).klog("needed") setting(rid)
+             "io.picolabs.twilio.sms",
+             "io.picolabs.prowl"].difference(wrangler:installedRulesets()).klog("needed") setting(rid)
       pre {
         absoluteURL = meta:rulesetURI;
       }

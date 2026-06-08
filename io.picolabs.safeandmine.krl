@@ -6,24 +6,6 @@ ruleset io.picolabs.safeandmine {
   }
   global {
 
-    /*
-    __testing = { "queries":
-      [ { "name": "__testing" }
-        , { "name": "getInformation", "args" : [ "info" ] }
-        , { "name": "getTags" }
-      ] , "events":
-      [ { "domain": "safeandmine", "type": "update", "attrs" : [ "name" ] }
-      , { "domain": "safeandmine", "type": "delete", "attrs": [ "toDelete" ] }
-      , { "domain": "safeandmine", "type": "new_tag", "attrs": [ "tagID", "domain" ] }
-      , { "domain": "safeandmine", "type": "deregister", "attrs": [ "tagID", "domain" ] }
-      , { "domain": "safeandmine", "type": "notify", "attrs": [ "tagID" ] }
-      , { "domain": "apps", "type": "cleanup" }
-      , { "domain": "generate", "type": "fake_store" }
-      , { "domain": "safeandmine", "type": "update_registry_eci", "attrs": [ "eci" ] }
-      ]
-    }
-    */
-    
     getInformation = function(info) {
       data = ent:contactInfo.defaultsTo({});
       info => data{info} | data
@@ -197,7 +179,7 @@ ruleset io.picolabs.safeandmine {
       domain = event:attr("domain").as("String");
     }
     
-      if (tagID.length() > 1) then 
+      if (tagID.length() > 0) then 
         noop();
     
       fired {
@@ -239,26 +221,26 @@ ruleset io.picolabs.safeandmine {
     select when wrangler channel_created
     
     pre {
-      tagID = event:attrs{"tagID"}.klog("TAGID");
-      domain = event:attrs{"domain"}.klog("DOMAIN");
-      channel = event:attrs{"channel"}{"id"}.klog("CHANNEL");
+      tagID = event:attr("tagID");
+      domain = event:attr("domain");
+      channel = event:attr("channel"){"id"};
     }
     
-    event:send({"eci": ent:registry_eci, 
-                "domain": "safeandmine", 
-                "name": "register_tag", 
-                "attrs" : { "tagID" : tagID, 
-                            "DID" : channel, 
-                            "domain" : domain,
-                            "pico_host": meta:host 
-                          } 
-                });
+    if tagID && domain && channel && ent:registry_eci then
+      event:send({"eci": ent:registry_eci, 
+                  "domain": "safeandmine", 
+                  "name": "register_tag", 
+                  "attrs" : { "tagID" : tagID, 
+                              "DID" : channel, 
+                              "domain" : domain,
+                              "pico_host": meta:host 
+                            } 
+                  });
      
     always {
-      ent:channels := ent:channels.defaultsTo([]).append(channel)
-      ent:tag_channel_eci := channel{"id"} // FIX: assuming only one tag? 
+      ent:channels := ent:channels.defaultsTo([]).append(channel);
+      ent:tag_channel_eci := channel;
     }
-    
   }
   
   rule post_response {
@@ -298,15 +280,24 @@ ruleset io.picolabs.safeandmine {
     pre {
       tagToDelete = event:attr("tagID");
       domain = event:attr("domain");
+    }
+    
+    if tagToDelete && domain && ent:registry_eci then
+      event:send({"eci": ent:registry_eci, "domain": "safeandmine", "name": "deregister_tag", "attrs" : { "tagID" : tagToDelete, "domain" : domain } });
+  }
+
+  rule deregister_tag_cleanup {
+    select when safeandmine deregister
+    
+    pre {
+      tagToDelete = event:attr("tagID");
+      domain = event:attr("domain");
       channelToDelete = ent:tagStore.get([domain, tagToDelete]);
     }
     
-    if tagToDelete && channelToDelete then 
-    event:send({"eci": ent:registry_eci.defaultsTo("CEmo7mURALxUzEVLkN2Fwc"), "domain": "safeandmine", "type": "deregister_tag", "attrs" : { "tagID" : tagToDelete, "domain" : domain } });
-    //http:post("https://apps.picolabs.io/safeandmine/api/delete", json = { "tagID" : tagToDelete });
-    //http:post("http://localhost:3001/safeandmine/api/delete", json = { "tagID" : tagToDelete, "domain" : domain });
+    if tagToDelete && channelToDelete then noop()
     
-    fired{
+    fired {
       ent:tagStore := ent:tagStore.defaultsTo({}).delete([domain,tagToDelete]).filter(function(v,k) {
         v.length() > 0
       });
@@ -337,11 +328,13 @@ ruleset io.picolabs.safeandmine {
     select when safeandmine notify
     
     pre {
-      toSend = sub:established().filter(function(x) {
-        x{"Tx_role"} == "manifold_pico"
-      }).head(){"Tx"}.klog("ECI to send notification");
+      parent = wrangler:parent_eci();
+      channels = wrangler:picoQuery(parent, "io.picolabs.wrangler", "channels", {"tags": "manifold"});
+      toSend = channels.filter(function(c) {
+        c{"tags"}.length() == 1
+      }).head(){"id"}.klog("ECI to send notification");
       tagID = event:attr("tagID");
-      picoId = meta:picoId;
+      picoId = wrangler:myself(){"id"};
       app = "SafeAndMine";
       rid = meta:rid;
       name = wrangler:name();

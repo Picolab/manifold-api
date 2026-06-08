@@ -1,0 +1,19 @@
+{
+  "name": "manifold-api",
+  "private": true,
+  "type": "module",
+  "description": "KRL rulesets for Manifold on Pico Engine 1.0",
+  "scripts": {
+    "test": "tsx t/run.ts",
+    "test:parse": "tsx t/parse.ts",
+    "test:keep": "tsx t/run.ts --keep",
+    "test:cleanup": "tsx t/cleanup.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "krl-compiler": "^1.3.0",
+    "minimatch": "^10.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
