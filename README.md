@@ -4,6 +4,11 @@ Manifold is a framework for the [pico engine](https://github.com/Picolab/pico-en
 
 This repository contains KRL (Kynetx Rules Language) rulesets for [Manifold](https://manifold.picolabs.io/), updated for compatibility with Pico Engine version 1.0.
 
+## Architecture
+
+![Manifold network: root pico, tag and skills registries, owner, Manifold pico, and thing/community picos](manifold_network.png)
+
+The root pico hosts the tag registry and owner pico. The owner pico manages the Manifold pico, which creates and orchestrates thing and community picos (solid lines: parent/child; dashed lines: subscriptions between picos).
 
 ## Ruleset Status
 
@@ -117,7 +122,7 @@ Current scenarios cover Manifold bootstrap (tag registry, owner, Manifold pico),
 
 **Full documentation** — prerequisites, flags, failed-run inspection, writing scenarios, and config — is in **[`t/README.md`](t/README.md)**.
 
-The sibling **temperature-network** repo reuses this harness via `dependsOn` for sensor-network tests; see its `t/README.md` for that setup.
+The sibling **sensor-network** repo reuses this harness via `dependsOn` and `manifoldApiPath` (default `../manifold-api`); see its `t/README.md`.
 
 ## File Conventions
 
