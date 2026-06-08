@@ -29,7 +29,7 @@ Core platform rulesets — covered by the integration test harness ([`t/README.m
 
 ### Pending review
 
-None at repo root — all active Manifold platform rulesets are reviewed. See **`OLD/`** for archived rulesets.
+None at repo root — all active Manifold platform rulesets are reviewed. Archived and experimental rulesets may exist locally under `OLD/` or `fix/`; those directories are gitignored and not published in this repo.
 
 ### Removed / superseded
 

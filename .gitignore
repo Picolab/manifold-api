@@ -16,8 +16,9 @@ dist/
 t/.runtime.json
 t/.test-context.json
 
-# Archived rulesets (local reference only)
+# Archived / experimental rulesets (local reference only)
 OLD/
+fix/
 
 # OS
 .DS_Store
