@@ -9,8 +9,11 @@ export interface MountConfig {
 
 export interface DependencyConfig {
   repo: string;
-  /** Path relative to this repo root. */
-  path: string;
+  /**
+   * Host path to the dependency repo, relative to this repo root or absolute.
+   * For `manifold-api`, omit to use top-level `manifoldApiPath` (default `../manifold-api`).
+   */
+  path?: string;
   mount: string;
   parseExclude?: string[];
 }
@@ -19,6 +22,8 @@ export interface TestConfig {
   repoName: string;
   dockerImage: string;
   mounts: MountConfig[];
+  /** Host path to manifold-api for cross-repo integration tests. */
+  manifoldApiPath?: string;
   dependsOn?: DependencyConfig[];
 }
 
@@ -47,6 +52,8 @@ export interface CliOptions {
   skipDocker: boolean;
   skipParse: boolean;
   configPath?: string;
+  /** Override config `manifoldApiPath` (cross-repo tests). */
+  manifoldApiPath?: string;
 }
 
 export interface ParseResult {

@@ -6,9 +6,37 @@ This repository contains KRL (Kynetx Rules Language) rulesets for [Manifold](htt
 
 ## Architecture
 
+Manifold organizes a personal network of picos as a small graph under the engine's root pico, with cross-links formed by subscriptions. The root pico hosts shared registries and the **owner** pico; the owner manages a single **Manifold** pico that creates thing and community picos and tracks them. Things can belong to one or more communities — dashed lines in the diagram are subscriptions (membership and event routing); solid lines are parent/child relationships in the wrangler hierarchy.
+
 ![Manifold network: root pico, tag and skills registries, owner, Manifold pico, and thing/community picos](manifold_network.png)
 
-The root pico hosts the tag registry and owner pico. The owner pico manages the Manifold pico, which creates and orchestrates thing and community picos (solid lines: parent/child; dashed lines: subscriptions between picos).
+- **Pico (root)** — The engine's top-level pico. Bootstrap (`io.picolabs.manifold_bootstrap`) runs here and creates the registry and owner child picos. In production this is typically the root of a dedicated Manifold engine instance.
+
+- **Tag Registry** — Child of the root pico running `io.picolabs.new_tag_registry`. Central store for NFC/QR tag IDs mapped to thing picos and redirect URLs (used by SafeAndMine and similar apps). The owner pico holds a reference to its registration channel so things can register tags before use.
+
+- **Skills Registry** — Child of the root pico running `io.picolabs.manifold.skills_registry`. Directory of named skills (ruleset IDs, optional URLs, MCP tool definitions) that can be installed on things. Manifold and things query it when adding capabilities.
+
+- **Owner** — Child of the root pico running `io.picolabs.profile` and `io.picolabs.manifold_owner`. Represents the human owner: contact info, tag-server configuration, and management of the Manifold child pico. Installing `manifold_owner` automatically creates the Manifold pico and installs `io.picolabs.manifold_pico`.
+
+- **Manifold** — Child of the owner pico running `io.picolabs.manifold_pico` plus notification rulesets. The operational hub: creates thing and community picos, maintains subscriptions to them, exposes `getThings()` / `getCommunities()`, and routes notifications (inbox, SMS, Prowl). Other repos (e.g. sensor-network) install additional bootstrap rulesets here to delegate domain-specific setup.
+
+- **Blue Backpack** *(thing example)* — A thing pico running `io.picolabs.thing` (often plus domain rulesets such as SafeAndMine). Represents a trackable object or device. Subscribes to Manifold as a `manifold_thing` and can belong to one or more communities (dashed line to Travel in the diagram).
+
+- **Travel** *(community example)* — A community pico running `io.picolabs.community`. Groups related things, accepts thing subscriptions, and can broadcast events to members. Subscribes to Manifold as a `manifold_community`; things join via `community add_thing`. Things can belong to more than one community.
+
+### Notifications
+
+Notification delivery is centralized on the **Manifold pico**. Bootstrap installs `io.picolabs.notifications` plus the channel modules `io.picolabs.twilio.sms` and `io.picolabs.prowl`. Any thing or community (or domain ruleset acting on their behalf) raises **`manifold add_notification`** on the Manifold pico with a subject **`picoId`**, a human-readable **`message`**, and identifying attrs such as **`thing`**, **`app`**, and **`ruleset`**.
+
+The notifications ruleset fans the alert out to whichever channels are **enabled for that subject pico**:
+
+- **Manifold** — Appended to the in-app inbox (`getNotifications()`, badge count)
+- **SMS** — Sent via Twilio using the owner's phone from `io.picolabs.profile` on the owner pico
+- **Prowl** — Push notification via the owner's Prowl API key
+
+Channels are **opt-in per subject** (each thing or community pico has its own settings). Toggle them with **`manifold change_notification_setting`** and attrs `{ id: picoId, option: "Manifold" }` (or `"SMS"`, `"Prowl"`). By default only the Manifold inbox is on; external channels stay off until explicitly enabled — sensor-network bootstrap, for example, turns on requested channels when a sensor community is created.
+
+Domain rulesets should not call Twilio or Prowl directly; they raise `manifold add_notification` and let Manifold handle routing and owner credentials.
 
 ## Ruleset Status
 

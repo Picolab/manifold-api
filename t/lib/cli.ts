@@ -29,6 +29,12 @@ export function parseCliArgs(argv: string[]): CliOptions {
           throw new Error("--config requires a path");
         }
         break;
+      case "--manifold-api-path":
+        opts.manifoldApiPath = argv[++i];
+        if (!opts.manifoldApiPath) {
+          throw new Error("--manifold-api-path requires a path");
+        }
+        break;
       default:
         if (arg.startsWith("-")) {
           throw new Error(`Unknown flag: ${arg}`);
@@ -48,8 +54,11 @@ Options:
   --skip-docker    Skip container start/stop (parse and scenarios only)
   --skip-parse     Skip krl-compiler verification
   --config <path>  Alternate t/config.json path
+  --manifold-api-path <path>
+                   Local manifold-api checkout (default: ../manifold-api from config)
 
 Environment:
   PICO_ENGINE_IMAGE   Override dockerImage from config (e.g. pjw/pico-engine:latest)
+  MANIFOLD_API_PATH   Same as --manifold-api-path
 `);
 }

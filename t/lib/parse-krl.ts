@@ -3,9 +3,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { minimatch } from "minimatch";
 import {
-  configRepoRoot,
   defaultConfigPath,
   loadConfig,
+  resolveDependencyHostPath,
   resolveMountHostPath,
 } from "./config.js";
 import type { ParseResult, TestConfig } from "./types.js";
@@ -22,7 +22,11 @@ function walkKrlFiles(dir: string, files: string[] = []): string[] {
   return files;
 }
 
-function mountRoots(config: TestConfig, configPath: string) {
+function mountRoots(
+  config: TestConfig,
+  configPath: string,
+  opts: { manifoldApiPath?: string } = {}
+) {
   const roots: Array<{ root: string; exclude: string[]; label: string }> = [];
 
   for (const mount of config.mounts) {
@@ -35,7 +39,7 @@ function mountRoots(config: TestConfig, configPath: string) {
 
   for (const dep of config.dependsOn ?? []) {
     roots.push({
-      root: path.resolve(configRepoRoot(configPath), dep.path),
+      root: resolveDependencyHostPath(dep, config, configPath, opts),
       exclude: dep.parseExclude ?? [],
       label: dep.repo,
     });
@@ -62,14 +66,17 @@ function verifyFile(filePath: string): string | null {
   return message;
 }
 
-export function parseMountedKrl(configPath?: string): ParseResult {
+export function parseMountedKrl(
+  configPath?: string,
+  opts: { manifoldApiPath?: string } = {}
+): ParseResult {
   const resolvedConfigPath = path.resolve(configPath ?? defaultConfigPath);
   const config = loadConfig(resolvedConfigPath);
   const errors: ParseResult["errors"] = [];
   const seen = new Set<string>();
   let filesChecked = 0;
 
-  for (const { root, exclude, label } of mountRoots(config, resolvedConfigPath)) {
+  for (const { root, exclude, label } of mountRoots(config, resolvedConfigPath, opts)) {
     if (!fs.existsSync(root)) {
       errors.push({
         file: root,

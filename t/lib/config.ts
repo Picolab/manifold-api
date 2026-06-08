@@ -51,6 +51,53 @@ export function resolveMountHostPath(
   return path.resolve(configRepoRoot(configPath), hostPath);
 }
 
+export interface ManifoldApiPathOptions {
+  manifoldApiPath?: string;
+}
+
+const DEFAULT_MANIFOLD_API_PATH = "../manifold-api";
+
+/** Resolve host filesystem path to a local manifold-api checkout. */
+export function resolveManifoldApiPath(
+  config: TestConfig,
+  configPath: string,
+  opts: ManifoldApiPathOptions = {}
+): string {
+  const raw =
+    opts.manifoldApiPath?.trim() ||
+    process.env.MANIFOLD_API_PATH?.trim() ||
+    config.manifoldApiPath?.trim() ||
+    config.dependsOn?.find(dep => dep.repo === "manifold-api")?.path?.trim() ||
+    DEFAULT_MANIFOLD_API_PATH;
+
+  return path.isAbsolute(raw)
+    ? raw
+    : path.resolve(configRepoRoot(configPath), raw);
+}
+
+/** Resolve a dependsOn entry to an absolute host path. */
+export function resolveDependencyHostPath(
+  dep: DependencyConfig,
+  config: TestConfig,
+  configPath: string,
+  opts: ManifoldApiPathOptions = {}
+): string {
+  if (dep.path?.trim()) {
+    const raw = dep.path.trim();
+    return path.isAbsolute(raw)
+      ? raw
+      : path.resolve(configRepoRoot(configPath), raw);
+  }
+
+  if (dep.repo === "manifold-api") {
+    return resolveManifoldApiPath(config, configPath, opts);
+  }
+
+  throw new Error(
+    `dependsOn entry "${dep.repo}" is missing path in ${configPath}`
+  );
+}
+
 export function toFileRulesetUrl(containerPath: string, krlFile: string): string {
   const normalized = path.posix.join(
     containerPath.replace(/\/+$/, ""),

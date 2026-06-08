@@ -5,7 +5,7 @@ Working context so we don't lose it across sessions.
 ## WHERE WE ARE (2026-06-08)
 
 ### Summary
-The sensor-network → Manifold migration is **working in manual/cursory testing** (bootstrap,
+The sensor network → Manifold migration is **working in manual/cursory testing** (bootstrap,
 community + sensor.community install, sensor initiation, community↔thing subscription, readings
 path). The **local TS + Docker integration test harness** in `manifold-api/t/` is **working**
 (parse → one Docker container → bootstrap → 14 scenarios → teardown). PDS work remains **parked**.
@@ -37,7 +37,7 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 - **External channels** — SMS/Prowl need Twilio/Prowl RS + owner profile phone on Manifold pico
 - **Parse gate** — `npm run test:parse` fails on 2 pending-review RSs: `io.picolabs.alexa.krl`,
   `io.picolabs.google_assistant.krl` (undefined `rids` in select). Fix or add to `parseExclude`
-- **Automated regression** — manifold-api harness has 14 scenarios; temperature-network tests
+- **Automated regression** — manifold-api harness has 14 scenarios; sensor-network tests
   not yet added (`dependsOn` planned)
 
 ### Integration test harness (WORKING — 2026-06-08)
@@ -57,7 +57,7 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 - **Teardown:** pass → remove container + delete pico home; fail → leave container up;
   `--keep` / `--retain-logs` flags
 - **Local only** for now (no CI yet)
-- **Dependencies:** `temperature-network/t` will declare `dependsOn: manifold-api` (not built yet)
+- **Dependencies:** `sensor-network/t` will declare `dependsOn: manifold-api` (not built yet)
 
 **Architecture (parent + child):**
 - **`t/run.ts` (parent):** parse gate → `setup()` (one container) → `setupManifoldBootstrap()` →
@@ -113,7 +113,7 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 **Next harness phases:**
 1. ~~Docker layer + parse gate~~ ✓
 2. ~~manifold-api scenarios (bootstrap, thing/community, safeandmine, journal)~~ ✓ (14 tests)
-3. **temperature-network/t** — `dependsOn` manifold-api, sensor bootstrap + initiation scenarios
+3. **sensor-network/t** — `dependsOn` manifold-api, sensor bootstrap + initiation scenarios
 4. Test RS for open channels / scenario conductor (optional)
 
 ### SafeAndMine tag registry (fixed for tests — 2026-06-08)
@@ -146,14 +146,14 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 ## Two repos involved
 - `manifold-api` (this repo, `/Users/pjw/Dropbox/prog/picolabs/manifold-api`) — the Manifold
   KRL rulesets being updated for Pico Engine 1.0. Think of Manifold as the "OS".
-- `temperature-network` (`/Users/pjw/prog/picolabs/temperature-network`) — the real sensor
+- `sensor-network` (`/Users/pjw/prog/picolabs/sensor-network`) — the real sensor
   network. Think of it as an "application" running on Manifold.
   - NOTE: ignore the `wovyn.*` rulesets in that repo (legacy/parallel).
   - NOTE: the `neighborhood_temps` ruleset in `manifold-api` is a separate gossip teaching
     example, NOT the sensor network. Red herring.
 
 ## Overall goal
-Fold the temperature network into Manifold's data model:
+Fold the sensor network into Manifold's data model:
 - The sensor community pico becomes a Manifold **community** pico (runs `io.picolabs.community`).
 - Each sensor becomes a Manifold **thing** pico (runs `io.picolabs.thing`).
 - Sensors join their community via a Manifold **community<->thing subscription**, replacing the
@@ -230,7 +230,7 @@ All edits below are complete (KRL is not compiled/linted here; needs runtime tes
   if a callback is registered for this picoID, `event:send` `community thing_created`
   `{rcn, thingPicoID, thing_eci}` to `callback_eci`, then clear the entry.
 
-### `temperature-network/io.picolabs.sensor.community.krl`
+### `sensor-network/io.picolabs.sensor.community.krl`
 - Added `use module io.picolabs.subscription alias subscription`.
 - `new_sensor` (select `sensor initiation`) rewritten to delegate: mint `rcn`, store
   `ent:pending{rcn}`, `event:send manifold create_thing {name, callback_eci, rcn}` to
@@ -246,28 +246,28 @@ All edits below are complete (KRL is not compiled/linted here; needs runtime tes
   `Tx_role == "thing"`) + `wrangler:skyQuery`, not `wrangler:children()`.
 - Removed the now-dead `sensor_initialization` rule (it depended on `new_child_created`).
 
-### `temperature-network/io.picolabs.lht65.router.krl`
+### `sensor-network/io.picolabs.lht65.router.krl`
 - `route_to_community` now raises `thing community_notify` instead of `event:send` to
   `wrangler:parent_eci()`.
 
-### `temperature-network/io.picolabs.lse01.router.krl`, `io.picolabs.lsn50.router.krl`, `io.picolabs.ldds20.krl` (2026-06-03)
+### `sensor-network/io.picolabs.lse01.router.krl`, `io.picolabs.lsn50.router.krl`, `io.picolabs.ldds20.krl` (2026-06-03)
 - Added the same `route_to_community` rule as `lht65.router` (select `sensor new_readings`,
   raise `thing community_notify` with `{domain:"sensor", type:"new_readings", attrs: readings}`).
   These routers previously had no forwarding rule; this is a net add.
 
-### `temperature-network/io.picolabs.iotplotter.krl` (2026-06-03)
+### `sensor-network/io.picolabs.iotplotter.krl` (2026-06-03)
 - `show_configuration()` is now the single source of truth for effective config: it reads
   `meta:rulesetConfig{"api_key"|"feed_id"}` first, falling back to `ent:api_key`/`ent:feed_id`.
 - `send_data_to_IoTPlotter` only calls `send_payload` when BOTH `api_key` and `feed_id` are
   non-null; postlude changed from `always` to `fired` so it only logs the POST response when a
   payload was actually sent.
 
-### `manifold-api` + `temperature-network`: `__testing` removed (2026-06-03)
+### `manifold-api` + `sensor-network`: `__testing` removed (2026-06-03)
 - Removed all `__testing` declarations (from `shares`/`provides` lists and `global` assignments,
   plus weather's prose comments) across the 18 manifold-api rulesets that had them.
-  temperature-network had none. Repo-wide search for `__testing` returns zero matches.
+  sensor-network had none. Repo-wide search for `__testing` returns zero matches.
 
-### `temperature-network/io.picolabs.sensor.thresholds.krl`
+### `sensor-network/io.picolabs.sensor.thresholds.krl`
 - `send_violation_to_parent` renamed to `send_violation_to_community`, now raises
   `thing community_notify` instead of sending to `parent_eci`.
 
@@ -410,7 +410,7 @@ Implemented all 8 steps below. Specifics & caveats:
   returns -- see picoQuery note below.)
 - picoQuery migration (2026-06-04): replaced ALL `wrangler:skyQuery(...)` with
   `wrangler:picoQuery(...)` (same params/order, drop-in) across notifications, thing, community,
-  manifold_import, email_notifications, and temperature-network sensor.community. skyQuery is
+  manifold_import, email_notifications, and sensor-network sensor.community. skyQuery is
   deprecated AND only did HTTP; pico-engine v1.X blocks HTTP on FAMILY channels (parent<->child).
   picoQuery uses `ctx:query()` locally on the same host, so it works over family channels. This
   RESOLVES the earlier worry about the Manifold pico's `parent_eci()` (a family channel to the
@@ -443,7 +443,7 @@ Decisions (locked):
 - CHANNELS: `["Manifold","SMS","Prowl"]`. Twilio+Text collapse into one `SMS`. Email DROPPED for now.
 - VERIFICATION: REMOVED. Trust the contacts in the owner's profile.
 - PROVIDER CONFIG: global, configured ONCE on the Manifold pico (not per app). Use the simpler
-  temperature-network rulesets `io.picolabs.twilio.sms` (account_sid/auth_token/from_number) and
+  sensor-network rulesets `io.picolabs.twilio.sms` (account_sid/auth_token/from_number) and
   `io.picolabs.prowl` (apikey/providerkey/application). KEEP their `send_sms`/`notify` defactions
   and have new event-driven rules call them.
 - RECIPIENT RESOLUTION: in the orchestrator. `addNotification` does one
@@ -485,7 +485,7 @@ Implementation steps (in order):
    `getOwnerEmail()` for later).
 6. `io.picolabs.manifold_pico`: install `notifications`, `twilio.sms`, `prowl`; drop the
    email/text/`*_notifications` rulesets from `initializationRids`/`updateManifoldVersion`.
-7. `temperature-network/io.picolabs.sensor.community` `catch_threshold_violation`: subject =
+7. `sensor-network/io.picolabs.sensor.community` `catch_threshold_violation`: subject =
    community (`picoId = meta:picoId`); keep the originating sensor's name in `thing` for display.
 8. Update MEMORY.md status when implemented.
 
@@ -532,7 +532,7 @@ Threshold violation reaches `catch_threshold_violation` -> `manifold add_notific
 `ent:notification_settings` being provisioned (see notifications TODO above).
 
 ## Sensor network bootstrap RS (IMPLEMENTED 2026-06-04, updated 2026-06-04)
-File: `temperature-network/io.picolabs.sensor.network_bootstrap.krl` -- install manually on the
+File: `sensor-network/io.picolabs.sensor.network_bootstrap.krl` -- install manually on the
 Manifold pico (app-specific; NOT in manifold_pico initializationRids).
 - `sensor create_community {name?, description?, notify_channels?}` (name defaults to "Sensors")
   -> `manifold new_community` + rcn + `sensor_bootstrap: true`; manifold_pico creates child,
@@ -545,7 +545,7 @@ Manifold pico (app-specific; NOT in manifold_pico initializationRids).
   per channel (default Manifold only; override notify_channels e.g. "Manifold,SMS,Prowl").
 - Channels: NO bootstrap work -- sensor.community create_channels handles `sensor` +
   `manifold_callback` on install. Community plumbing + Manifold subscription = manifold_pico.
-- Still required separately: temperature-network ruleset registration (meta:rulesetURI), owner
+- Still required separately: sensor-network ruleset registration (meta:rulesetURI), owner
   profile phone, Twilio/Prowl config on Manifold pico for external notification delivery.
 
 ## FUTURE: Personal Data Store (PDS) — pinned 2026-06-04
@@ -729,7 +729,7 @@ was fixed 2026-06-04.
 - **Callback `thing_eci`** — pass subscription `Tx`, not family-channel picoID.
 - **`io.picolabs.community` syntax** — stray character after `meta { }` block prevents ruleset
   registration; verify ruleset actually loaded if `addThing` never runs.
-- **Two-repo bootstrap** — `sensor.network_bootstrap` `meta:rulesetURI` is temperature-network;
+- **Two-repo bootstrap** — `sensor.network_bootstrap` `meta:rulesetURI` is sensor-network;
   cannot install `io.picolabs.community` from that URL. manifold_pico installs community;
   bootstrap installs `sensor.community` only. Gate finish on `sensor_bootstrap` attr, not
   `ent:pending{rcn}` alone.

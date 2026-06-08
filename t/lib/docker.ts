@@ -4,9 +4,9 @@ import * as fs from "fs";
 import * as net from "net";
 import * as path from "path";
 import {
-  configRepoRoot,
   defaultConfigPath,
   loadConfig,
+  resolveDependencyHostPath,
   resolveDockerImage,
   resolveMountHostPath,
   testContainerName,
@@ -56,7 +56,11 @@ export async function pickHostPort(): Promise<number> {
   throw new Error(`Could not find a free port in ${MIN_PORT}-${MAX_PORT}`);
 }
 
-function resolveAllMounts(config: TestConfig, configPath: string) {
+function resolveAllMounts(
+  config: TestConfig,
+  configPath: string,
+  opts: { manifoldApiPath?: string } = {}
+) {
   const mounts = config.mounts.map(m => ({
     name: m.name,
     hostPath: resolveMountHostPath(m.hostPath, configPath),
@@ -65,7 +69,7 @@ function resolveAllMounts(config: TestConfig, configPath: string) {
   }));
 
   for (const dep of config.dependsOn ?? []) {
-    const hostPath = path.resolve(configRepoRoot(configPath), dep.path);
+    const hostPath = resolveDependencyHostPath(dep, config, configPath, opts);
     mounts.push({
       name: dep.repo,
       hostPath,
@@ -77,7 +81,10 @@ function resolveAllMounts(config: TestConfig, configPath: string) {
   return mounts;
 }
 
-export async function startEngine(configPath?: string): Promise<RuntimeState> {
+export async function startEngine(
+  configPath?: string,
+  opts: { manifoldApiPath?: string } = {}
+): Promise<RuntimeState> {
   const resolvedConfigPath = path.resolve(configPath ?? defaultConfigPath);
   const config = loadConfig(resolvedConfigPath);
   const dockerImage = resolveDockerImage(config);
@@ -88,7 +95,7 @@ export async function startEngine(configPath?: string): Promise<RuntimeState> {
 
   fs.mkdirSync(picoEngineHome, { recursive: true });
 
-  const mounts = resolveAllMounts(config, resolvedConfigPath);
+  const mounts = resolveAllMounts(config, resolvedConfigPath, opts);
   for (const mount of mounts) {
     if (!fs.existsSync(mount.hostPath)) {
       throw new Error(`Mount host path does not exist: ${mount.hostPath}`);

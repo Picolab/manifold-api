@@ -105,12 +105,14 @@ npm run test:cleanup -- --dry-run
 | `--skip-docker` | Skip container start/stop; run parse (and any non-Docker scenarios) only |
 | `--skip-parse` | Skip `krl-compiler` verification |
 | `--config <path>` | Use a different config file instead of `t/config.json` |
+| `--manifold-api-path <path>` | Cross-repo tests: path to local manifold-api (overrides `manifoldApiPath` in config) |
 
 Environment:
 
 | Variable | Effect |
 |----------|--------|
 | `PICO_ENGINE_IMAGE` | Overrides `dockerImage` in `t/config.json` |
+| `MANIFOLD_API_PATH` | Same as `--manifold-api-path` |
 
 ## Inspecting a failed run
 
@@ -188,7 +190,7 @@ directories (including orphans where the container was removed manually). Clears
 | `mounts[].hostPath` | Directory on the host, relative to repo root |
 | `mounts[].containerPath` | Mount point inside the container (e.g. `/var/manifold-api`) |
 | `mounts[].parseExclude` | [minimatch](https://github.com/isaacs/minimatch) patterns, relative to mount root, skipped during parse |
-| `dependsOn` | Other repos to mount (for `temperature-network/t` later) |
+| `dependsOn` | Other repos to mount (cross-repo tests). For `manifold-api`, set `manifoldApiPath` or `dependsOn[].path` (relative or absolute). |
 
 Rulesets installed during tests should use **file URLs** inside the container, e.g.:
 
@@ -357,7 +359,7 @@ Manifold subscription `Tx` channel.
 |-------|--------|---------|
 | 1 | Done | Docker harness, parse gate, health scenario, teardown policy |
 | 2 | Done | Manifold bootstrap scenarios (tag registry, skills, owner, manifold) |
-| 3 | In progress | Thing/community scenarios done; `temperature-network/t` with `dependsOn` planned |
+| 3 | In progress | Thing/community scenarios done; `sensor-network/t` with `dependsOn` planned |
 | 4 | Planned | Test RS / open channels for async multi-pico flows |
 
 ## Troubleshooting
