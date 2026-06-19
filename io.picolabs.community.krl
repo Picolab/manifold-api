@@ -2,16 +2,22 @@ ruleset io.picolabs.community {
   meta {
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
+    use module io.picolabs.pds alias pds
     shares things, queryThing, sequences, description
   }
   global {
+
+    pds_name = function(eci) {
+      wrangler:picoQuery(eci, "io.picolabs.pds", "profile", "name"){"profile"}
+    }
 
     things = function() {
       subscription:established().filter(function(sub) {
         sub{"Tx_role"} == "thing"
       }).map(function(sub) {
         cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-        name = cached{"name"} || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
+        name = cached{"name"} || pds_name(sub{"Tx"})
+                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
         sub.put(cached).put({"name": name})
       })
     }
@@ -26,7 +32,7 @@ ruleset io.picolabs.community {
     }
 
     description = function() {
-      ent:description
+      pds:profile("description"){"profile"}
     }
 
   } // end global
@@ -100,7 +106,7 @@ ruleset io.picolabs.community {
     }
     if not desc.isnull() then noop()
     fired {
-      ent:description := desc
+      raise pds event "updated_profile" attributes {"description": desc}
     }
   }
 
@@ -109,21 +115,23 @@ ruleset io.picolabs.community {
     pre {
       thing_host = event:attr("host") || null
       thing_eci = event:attr("eci")
-      thing = wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself")
-      thing_id = thing{"id"}
+      thing = wrangler:picoQuery(thing_eci, "io.picolabs.pds", "profile")
+      thing_id = wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself"){"id"}
+      thing_name = thing{"profile"}{"name"}
+                    || wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself"){"name"}
       query_ok = thing && thing{"picoQueryError"}.isnull() && thing_id
     }
     if query_ok then every {
       send_directive("requesting community-thing subscription", {
         "thing_eci": thing_eci,
         "thing_id": thing_id,
-        "thing_name": thing{"name"}
+        "thing_name": thing_name
       })
       event:send({
         "eci": thing_eci, "eid": "subscription",
         "domain": "wrangler", "type": "subscription",
         "attrs": {
-          "name"        : wrangler:myself(){"name"} + ":" + thing{"name"},
+          "name"        : wrangler:myself(){"name"} + ":" + thing_name,
           "picoID"      : thing_id,
           "Rx_role"     : "thing",
           "Tx_role"     : "community",
@@ -143,13 +151,16 @@ ruleset io.picolabs.community {
     select when wrangler subscription_added
     pre {
       isCommunity = event:attr("Tx_role") == "thing"
-      thing = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself") | null
+      thing = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.pds", "profile") | null
+      thing_id = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself"){"id"} | null
+      thing_name = thing && thing{"profile"} => thing{"profile"}{"name"}
+                    | wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself"){"name"}
     }
-    if isCommunity && thing then noop()
+    if isCommunity && thing_id then noop()
     fired {
       ent:thingInfo{event:attr("Id")} := {
-        "id"  : thing{"id"},
-        "name": thing{"name"}
+        "id"  : thing_id,
+        "name": thing_name
       }
     }
   }

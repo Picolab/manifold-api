@@ -81,8 +81,9 @@ ruleset io.picolabs.notifications {
       // pico. Only resolved when SMS is actually enabled for this subject.
       sms_on = isEnabled(picoId, "SMS");
       to_phone = sms_on => wrangler:picoQuery(wrangler:parent_eci(),
-                                             "io.picolabs.profile",
-                                             "getOwnerPhone")
+                                             "io.picolabs.pds",
+                                             "profile",
+                                             "phone"){"profile"}
                          | null;
 
       // Superset of attrs the delivery channels might need; each channel ruleset

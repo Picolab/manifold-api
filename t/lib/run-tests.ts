@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const SCENARIO_FILES = [
   "health.scenario.ts",
   "bootstrap.scenario.ts",
+  "pds.scenario.ts",
   "thing-community.scenario.ts",
   "safeandmine.scenario.ts",
   "journal.scenario.ts",

@@ -2,13 +2,16 @@
 
 Working context so we don't lose it across sessions.
 
-## WHERE WE ARE (2026-06-08)
+## WHERE WE ARE (2026-06-09)
 
 ### Summary
-The sensor network → Manifold migration is **working in manual/cursory testing** (bootstrap,
-community + sensor.community install, sensor initiation, community↔thing subscription, readings
-path). The **local TS + Docker integration test harness** in `manifold-api/t/` is **working**
-(parse → one Docker container → bootstrap → 14 scenarios → teardown). PDS work remains **parked**.
+The sensor network → Manifold migration is **working** in both manual testing and automated
+integration tests. **manifold-api** harness: parse → Docker → bootstrap → **14 scenarios** →
+teardown (~18s on Node 22). **sensor-network** harness: same stack via `dependsOn` +
+`manifoldApiPath` → **5 scenarios** → teardown (~10s). PDS **Phase A–F done** (engine default-install + Manifold hooks removed).
+
+Both repos pushed to GitHub (`windley/manifold-api`, `windley/sensor-network`; the latter
+renamed from `temperature-network`).
 
 **Recommended runtime:** Node **22 LTS** (project requires 18+; 20 is maintenance-only).
 After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
@@ -32,13 +35,14 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 | KRL hygiene | One action block; one postlude; prelude = name decls; `ent:{key} :=` not `.put()` — see **KRL conventions** below |
 
 ### Still open / not fully verified
-- **Notification delivery** — `addNotification` fires but channels must be provisioned via
-  `ent:notification_settings` / bootstrap `community_ready` → `change_notification_setting`
-- **External channels** — SMS/Prowl need Twilio/Prowl RS + owner profile phone on Manifold pico
+- **Notification delivery (external)** — Manifold inbox works when provisioned; SMS/Prowl need
+  Twilio/Prowl config on Manifold pico + owner profile phone. Sensor communities get Manifold
+  channel via `network_bootstrap` `community_ready`; external channels opt-in per community.
 - **Parse gate** — `npm run test:parse` fails on 2 pending-review RSs: `io.picolabs.alexa.krl`,
   `io.picolabs.google_assistant.krl` (undefined `rids` in select). Fix or add to `parseExclude`
-- **Automated regression** — manifold-api harness has 14 scenarios; sensor-network tests
-  not yet added (`dependsOn` planned)
+- **SafeAndMine tags** — register/deregister scenarios pass in harness; real NFC/QR flow not
+  fully verified in production
+- **CI** — local harness only; no GitHub Actions yet
 
 ### Integration test harness (WORKING — 2026-06-08)
 
@@ -54,10 +58,12 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 - Repo dirs bound to `/var/<repo-name>` (e.g. `/var/manifold-api`)
 - **Parse first:** all `*.krl` under each mount; `parseExclude` minimatch patterns per mount
   (currently `OLD/**`, `fix/**`)
-- **Teardown:** pass → remove container + delete pico home; fail → leave container up;
-  `--keep` / `--retain-logs` flags
+- **Teardown:** always remove container on exit (pass or fail); delete pico home unless
+  `--retain-logs`; `--keep` skips container stop for inspection
 - **Local only** for now (no CI yet)
-- **Dependencies:** `sensor-network/t` will declare `dependsOn: manifold-api` (not built yet)
+- **Cross-repo:** `manifoldApiPath` in `TestConfig` + `--manifold-api-path` / `MANIFOLD_API_PATH`;
+  `resolveDependencyHostPath()` for `dependsOn` mounts. **sensor-network/t** uses this (built
+  2026-06-08, committed 2026-06-09).
 
 **Architecture (parent + child):**
 - **`t/run.ts` (parent):** parse gate → `setup()` (one container) → `setupManifoldBootstrap()` →
@@ -113,8 +119,14 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 **Next harness phases:**
 1. ~~Docker layer + parse gate~~ ✓
 2. ~~manifold-api scenarios (bootstrap, thing/community, safeandmine, journal)~~ ✓ (14 tests)
-3. **sensor-network/t** — `dependsOn` manifold-api, sensor bootstrap + initiation scenarios
-4. Test RS for open channels / scenario conductor (optional)
+3. ~~sensor-network/t — `dependsOn` manifold-api, sensor bootstrap + initiation scenarios~~ ✓ (5 tests)
+4. Sensor readings/threshold + notification scenarios in sensor-network (optional)
+5. Test RS for open channels / scenario conductor (optional)
+
+### README / docs (2026-06-09)
+- Root README: architecture diagram (`manifold_network.png`), per-pico bullets, notifications
+  section (centralized fan-out via `io.picolabs.notifications`).
+- `t/README.md`: cross-repo `manifoldApiPath` for dependent repos.
 
 ### SafeAndMine tag registry (fixed for tests — 2026-06-08)
 
@@ -139,15 +151,18 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 `tag_register_response` with `"name"` not `"type"`.
 
 ### Parked
-- **PDS** — see FUTURE section below; profile works on owner pico for now
+- **PDS + mirrors** — see FUTURE section below; **engine-default PDS** + pico event schema + selective log/replay; security in [`docs/Managing_PDS.md`](docs/Managing_PDS.md#security-model); profile works on owner pico for now
+- **Channel policy engine fix** — permit-over-deny + pico-level ceiling; see [Design debt: channel policy](#design-debt-channel-policy--permit-overrides-deny-must-fix)
+- **SPIFFE + Cedar policy** — see FUTURE section below; exploration only, not implemented
 
 ---
 
 ## Two repos involved
 - `manifold-api` (this repo, `/Users/pjw/Dropbox/prog/picolabs/manifold-api`) — the Manifold
   KRL rulesets being updated for Pico Engine 1.0. Think of Manifold as the "OS".
-- `sensor-network` (`/Users/pjw/prog/picolabs/sensor-network`) — the real sensor
-  network. Think of it as an "application" running on Manifold.
+- `sensor-network` (`/Users/pjw/Dropbox/prog/picolabs/sensor-network`) — the real sensor
+  network. Think of it as an "application" running on Manifold. GitHub: `windley/sensor-network`
+  (renamed from `temperature-network`, 2026-06-09).
   - NOTE: ignore the `wovyn.*` rulesets in that repo (legacy/parallel).
   - NOTE: the `neighborhood_temps` ruleset in `manifold-api` is a separate gossip teaching
     example, NOT the sensor network. Red herring.
@@ -216,7 +231,8 @@ Runtime reporting (after a sensor is set up):
   re-raises `sensor new_readings` -> `catch_new_readings` stores it.
 - Threshold violation: `sensor.thresholds` detects on the thing, raises
   `sensor threshold_violation` -> `send_violation_to_community` raises `thing community_notify`
-  -> ... -> `ingest_thing_event` -> `catch_threshold_violation` (Prowl/Twilio) on the community.
+  -> ... -> `ingest_thing_event` -> `catch_threshold_violation` raises
+  `manifold add_notification` on the Manifold pico (NOT direct Prowl/Twilio on community).
 
 ## Implementation status: DONE
 All edits below are complete (KRL is not compiled/linted here; needs runtime testing).
@@ -281,13 +297,11 @@ All edits below are complete (KRL is not compiled/linted here; needs runtime tes
 - `initialize_temperatures` in sensor.community still references `ctx:children` (now stale,
   harmless dead path). Not in scope.
 
-## Test plan (not yet run)
-- Create community, install `sensor.community`, send `sensor initiation` -> thing pico created,
-  `io.picolabs.thing` + sensor rulesets installed, community/thing subscription established,
-  `ent:pending{rcn}` cleared.
-- Plain `manifold create_thing` (no `callback_eci`/`rcn`) -> identical-to-today behavior.
-- Two communities (home, cabin) create sensors concurrently -> correlation keeps them separate.
-- Sensor heartbeat -> reading reaches the correct community; threshold alerts still fire.
+## Test plan (manual — largely covered by harness)
+- ~~Create community, install `sensor.community`, send `sensor initiation`~~ ✓ sensor-network harness
+- Plain `manifold create_thing` (no `callback_eci`/`rcn`) -> identical-to-today behavior (manifold-api harness)
+- Two communities create sensors concurrently -> correlation keeps them separate (not automated)
+- Sensor heartbeat -> reading reaches community; threshold -> `add_notification` (manual; not in harness yet)
 
 ## Notifications are a Manifold platform service (future cleanup)
 Insight: notification delivery is part of the service platform Manifold provides, so sensors
@@ -548,10 +562,111 @@ Manifold pico (app-specific; NOT in manifold_pico initializationRids).
 - Still required separately: sensor-network ruleset registration (meta:rulesetURI), owner
   profile phone, Twilio/Prowl config on Manifold pico for external notification delivery.
 
-## FUTURE: Personal Data Store (PDS) — pinned 2026-06-04
+## FUTURE: Personal Data Store (PDS) — pinned 2026-06-04, direction locked 2026-06-09, revised 2026-06-13
 
 Revisit after community/sensor testing. Goal: a Manifold-era PDS inspired by CloudOS and Fuse,
-not a port of the old ruleset.
+not a port of the old ruleset. **Broader platform goal (2026-06-13):** picos should be
+**copyable** and **networks of picos reconstructible** — PDS + selective event logging is the
+foundation for **pico mirrors** (see below).
+
+### Platform direction (revised 2026-06-13)
+
+**PDS is a required platform ruleset — installed by default on every pico (pico-engine change).**
+
+Supersedes the interim plan "Manifold installs PDS on every pico it creates." Wrangler is
+engine-default today; PDS should join it at that layer.
+
+| Point | Decision |
+|-------|----------|
+| **Required RS** | Not optional, not Manifold-only plumbing — every pico gets PDS like Wrangler |
+| **Why PDS over raw `ent:*`** | Entity vars are already RS-scoped; the win is a **stable contract** so platform enhancements (auth, validation, audit, **mirror/replay hooks**) land in one place without every app reinventing storage |
+| **Delivery** | **Pico-engine update** — bundle/default-install PDS alongside Wrangler; register ruleset in engine distribution |
+| **Manifold until engine ships** | Interim: Manifold bootstrap may still install PDS explicitly; remove duplicate once engine defaults it |
+| **Engine batch opportunity** | Same engine release can tackle other queued repo issues (channel policy, SPIFFE sketch, default ruleset bundle, …) |
+
+- **Source:** [`PDS.krl`](https://github.com/Picolab/wrangler/blob/master/PDS.krl) in
+  [Picolab/wrangler](https://github.com/Picolab/wrangler) — adapt for Engine 1.0; local copy
+  `io.picolabs.pds.krl` in this repo (parse fixes pending). Fork only if Wrangler upstream gaps
+  require Manifold-specific changes.
+- **Profile migration path:** owner contact info (`io.picolabs.profile`) eventually folds into
+  PDS on the owner pico; until then profile-on-owner remains the SMS recipient source.
+- **Start thin when implementing:** profile slice first; extend to general/settings layers.
+
+### Manifold direction (decided 2026-06-09, superseded for install policy)
+
+**Use the Wrangler PDS ruleset.** ~~Have Manifold install it on every pico.~~ → **Engine
+default-install** (above). Manifold's job becomes apps/domain RS only — read/write via PDS events
+and `use module`, not ad hoc `ent:*` scattered across rulesets.
+
+### Overall goal: pico mirrors (2026-06-13)
+
+Long-standing desire: **allow pico mirrors.**
+
+| Mirror type | What it copies | Mechanism |
+|-------------|----------------|-----------|
+| **Simple mirror** | One pico's state | PDS snapshot (`profile`, `general`, `settings`) + installed RIDs |
+| **Network mirror** | Tree + relationships | More than single-pico data — needs **parent/child, subscriptions, channels, ruleset installs** |
+| **Living mirror** | Evolving replica | **Selective event log** replay, not full engine trace |
+
+Simple mirror is easier if every pico has PDS (one canonical data surface). Network mirror
+requires **relationship events** (Wrangler/subscription lifecycle) plus replayable state changes
+(PDS write commands).
+
+**Right approach for network mirrors:** an **append-only event log** that can be **replayed** on
+a mirror pico (or mirror subtree). Not every event should be logged — only those registered for
+logging. Replay applies registered events to reconstruct structure + state.
+
+**Literature:** event sourcing / CQRS (Greg Young, Martin Fowler's event-sourcing essay); DDD
+domain events; snapshot + event tail for restore; causal ordering for graph structure (subscriptions
+before dependent actions). Review event-log patterns in DDD/event-storming space before designing
+storage format.
+
+### Pico-level event schema (2026-06-13)
+
+New **pico feature** (engine + wrangler integration): an **event schema** per pico.
+
+- **Pico basis, not ruleset basis** — multiple rules from different RSs may respond to one event;
+  the event is the unit of record at the pico boundary.
+- **Per `domain:type`:** attributes (required / optional / types); whether the event is **logged**
+  for mirror/replay; optional flags (e.g. idempotent replay, `replaySafe: false` for external side effects).
+- **Registration:** rulesets register events into the pico's schema (mechanism TBD: KRL meta,
+  install-time wrangler hook, explicit register API — lots of details remain).
+- **Validation:** engine warns (or rejects in strict mode) on events not in schema — useful before
+  mirrors exist.
+- **Logging:** schema marks which events are appended to the pico's replay log.
+
+**Default logging policy:**
+
+| Event source | Logged by default? | Rationale |
+|--------------|-------------------|-----------|
+| **Wrangler** | **Yes — all wrangler events** | Captures tree, installs, subscriptions, channels — the **relationship graph** |
+| **PDS write commands** | **Yes** (`pds updated_profile`, `new_data_available`, `add_settings`, …) | Canonical **data plane**; replay commands (not necessarily `pds data_added` notifications) |
+| **App/domain events** | **Opt-in** | Ruleset registers + sets `logged: true` only when mirror needs them (e.g. sensor readings) |
+
+With PDS on every pico + wrangler on every pico, **structure and data storage events are logged
+and replayable by default** — the platform substrate for mirrors.
+
+### Selective logging & replay (sketch)
+
+- **Log commands, not effects** — prefer replaying `pds new_data_available` (idempotent write
+  path) over internal `pds data_added` notifications unless effect-logging is explicitly desired.
+- **Side effects on replay** — Twilio, Prowl, external HTTP must be suppressed or tagged
+  `replaySafe: false` in schema; mirror driver skips or stubs them.
+- **Cross-pico events** — subscription delivers to another pico's bus: log at source, destination,
+  or both? Network mirror may need **forest-level log** keyed by SPIFFE path / owner subtree.
+- **Snapshots** — periodic PDS snapshot + event tail vs pure replay from genesis (Fuse
+  `fleet_channel` idempotency pattern is a precedent for durable cross-pico state).
+- **Engine vs RS** — schema registry + append-only store likely **engine**; registration API via
+  wrangler + ruleset meta; replay driver TBD (`io.picolabs.mirror` RS or wrangler subsystem).
+
+### Open design questions (mirrors + PDS)
+
+1. Schema conflicts — two RS register same `domain:type` with different attrs?
+2. Who may register — any installed RS, or platform RS only for platform events?
+3. Mirror scope — single pico, owner subtree, subscription-connected component?
+4. Cross-engine mirrors — federation + SPIFFE trust bundles (ties to SPIFFE section below).
+5. PDS future enhancements enabled by default install — `meta:callingRID()` write auth, validation,
+   structured log records on persist, versioned profile merges.
 
 ### Background
 - CloudOS PDS: `/Users/pjw/prog/kynetx/cloudos/PDSService/a169x676.krl` (RID `a169x676`).
@@ -595,22 +710,398 @@ in `myself()`, but that's wrangler internals — apps shouldn't need wrangler kn
 queries just to display "what is this pico called?". One query API on every pico (thing, community,
 owner) simplifies notifications, UI lists, and multi-pico apps.
 
-### Possible Manifold direction (not decided)
-- **`io.picolabs.pds`** installed on every pico (or at minimum owner + thing + community picos).
-- Start thin: profile slice only — `ent:profile {name, description?, photo?}` with
-  `getProfile()` / `getName()` and `pds update_profile` events (mirror current profile API shape).
-  Owner adds contact fields (email, phone) in same store or keep `io.picolabs.profile` as alias.
-- Extend later: namespaced `ent:elements`, per-ruleset `ent:settings`, caller-scoped
-  `get_config_value()`, uninstall cleanup.
+### Delivery phases (interim install via manifold-api → engine default later)
+
+**2026-06-13:** Iterate in manifold-api mount (`meta:rulesetURI` + flush) — no pico-engine
+Docker rebuild per PDS edit. Promote to engine default only when contract is stable.
+
+| Phase | Scope | Repo | Goal |
+|-------|--------|------|------|
+| **A** | Fix `io.picolabs.pds.krl` | manifold-api | krl-compiler verify passes ✓ |
+| **B** | Wire PDS install on every Manifold-created pico | manifold-api | bootstrap, owner, manifold_pico, thing, community, registries — PDS before domain RS ✓ |
+| **C** | Harness proof | manifold-api | scenario: PDS installed, `pds` channel, query/write profile + general on owner/thing ✓ |
+| **D** | Migrate **manifold-api** rulesets to use PDS | manifold-api | profile shim, thing/community names+description, safeandmine contact/registry, notifications phone ✓ |
+| **E** | Migrate **sensor-network** rulesets to use PDS | sensor-network | thresholds + community names/notifications; bootstrap reads PDS profile ✓ |
+| **F** | Engine default-install PDS | pico-engine | bundle `io.picolabs.pds`; wrangler child init + root startup; remove Manifold install hooks ✓ |
+
+**D vs E:** Installing PDS on picos (B) does not require apps to read/write it. **D** is
+Manifold platform/app RS adoption in this repo. **E** is domain app adoption in sensor-network —
+second repo, second harness pass, after manifold-api patterns are proven. Do not mix in one PR.
+
+**Phase D candidates (manifold-api, incremental):**
+- Thing/community display names → `pds:profile("name")`; sync with wrangler name / `ent:things`
+- Owner contact → PDS profile on owner pico (replace `io.picolabs.profile` gradually)
+- SafeAndMine contact card → `general.safeandmine`
+- Manifold pico lists → read names from PDS via picoQuery where needed
+- Notification `thing` attr → PDS profile name
+
+**Phase E candidates (sensor-network, incremental):**
+- `sensor.community` cached names / `pico_name` attrs → PDS profile on thing picos
+- Bootstrap pending state → optional `general.sensor` namespace (later)
+- Threshold notification display strings
+
+**Deferred (not A–F):** pico event schema, selective logging, mirrors, engine channel-policy fixes.
+
+### Possible implementation details (when we build it)
+- Start thin: profile slice — `getProfile()` / `getName()` and PDS update events (mirror current
+  profile API shape on owner; same API on thing/community picos for display names).
+- Extend later: namespaced `ent:general`, per-ruleset `ent:settings`, caller-scoped
+  `get_config_value()`, uninstall cleanup (from CloudOS three-layer model).
 - Modernize vs CloudOS: ruleset names not RIDs; drop `myCloud`/doorbell/gtour; use `picoQuery` for
   cross-pico when needed, `use module` for same-pico reads.
-- Candidates for PDS-style storage when built: sensor bootstrap state, per-community notify
-  provisioning, shared thing config, notification display names without event-attr stitching.
+- **Engine-default PDS** on every pico (Phase F); `io.picolabs.pds.krl` remains in manifold-api mount for dev flush only.
+- **Mirrors (post F):** replay driver, forest-level log, app event registration UI.
 
 ### Carry forward vs leave behind
 - **Keep:** three-layer model, write-through events, namespace conventions, reactive settings,
-  per-pico profile identity.
-- **Defer:** full port of CloudOS PDS; folding profile into PDS (profile works now on owner pico).
+  per-pico profile identity, **engine-default PDS**, pico event schema, selective logging for mirrors.
+- **Defer:** full port of CloudOS PDS; folding profile into PDS (profile works now on owner pico);
+  network mirror replay driver.
+
+### Security model (PDS) — documented 2026-06-04
+
+Developer doc: [`docs/Managing_PDS.md`](docs/Managing_PDS.md#security-model).
+
+**Entity vars are RS-scoped**, not pico-wide. PDS `ent:profile` / `ent:general` / `ent:settings`
+live in `io.picolabs.pds` only. Other rulesets cannot overwrite them by assigning their own
+`ent:*`; they must raise `pds` events (or query via `use module`). Duplicating data in app
+`ent:*` is a consistency problem, not a cross-RS overwrite attack.
+
+**Trust model today:** install-time trust + channel capabilities (ECI + event/query policy).
+Same-pico PDS writes have **no caller authorization** — any installed RS can raise `pds` events
+and PDS will persist. Cross-pico access requires an ECI whose policy allows the event or query.
+Human auth (OIDC/session on owner UI) is orthogonal to PDS write authorization on thing picos.
+
+**Mitigations (now):**
+
+| Mitigation | Notes |
+|------------|-------|
+| **Curated installs** | Manifold bootstrap installs only known RIDs on owner/things/communities |
+| **No untrusted RS** | Primary real gate — once installed, RS is fully trusted on that pico |
+| **Narrow channel policies** | Restrict cross-pico `io.picolabs.pds` queries; treat ECIs as secrets |
+| **Namespace conventions** | One canonical store per app in `general.<namespace>` — avoid shadow `ent:*` |
+| **Gate destructive events** | `pds clear_all_data` test-only in production |
+| **Query policy on sensitive data** | Do not expose owner email/phone via wide-open query channels |
+
+**Mitigations (near-term, PDS RS):**
+
+| Mitigation | Notes |
+|------------|-------|
+| **`meta:callingRID()` on writes** | General: only RID matching namespace (or allowlist) may write that namespace; settings: only owning RID (mirror CloudOS `get_config_value` read pattern); profile: platform RIDs only (wrangler, manifold UI path) |
+| **Remove or admin-gate `clear_all_data`** | Production picos should not accept wipe from any RS |
+
+**Future plans (engine + platform — see SPIFFE section below):**
+
+| Layer | Addresses |
+|-------|-----------|
+| **SPIFFE SVID at engine boundary** | Cross-pico workload identity; optional `authPolicy.requireSpiffe` on sensitive channels |
+| **Channel policy engine fix** | Deny-over-permit; pico-level policy ceiling; **wildcard `*.*` must require SPIFFE** — see [Design debt: channel policy](#design-debt-channel-policy--permit-overrides-deny-must-fix) |
+| **Cedar in engine** | Authorize principal + action + resource before events/queries reach KRL |
+| **Channel templates (Wrangler)** | Thing/community/owner types cap what app RSs can declare on new channels |
+| **Engine-owned channels** | Platform channels (e.g. `manifold_callback`) not replaceable by app RS with `allow: *` |
+| **Install allowlist / signed RIDs** | Longer term — only approved rulesets installable in production engines |
+| **Audit log** | SPIFFE ID + event/query for forensics |
+
+SPIFFE/Cedar fix **engine-boundary** and **cross-pico** trust; **`meta:callingRID()` in PDS**
+fixes **same-pico forged `pds` events** from co-installed RSs. Both layers needed for defense in depth.
+
+## Design debt: channel policy — permit overrides deny (must fix)
+
+Documented 2026-06-04. Affects all pico security that relies on channel event/query policies,
+not only Manifold or PDS.
+
+### Current engine behavior
+
+Channel `eventPolicy` / `queryPolicy` use allow and deny lists (domain/name or rid/fn). Evaluation
+is **per channel (per ECI)**, and within that policy **permit overrides deny** — an allow rule
+wins even when a deny rule would also match.
+
+Worse, authorization is effectively **the union of all channels on the pico**. Each ECI is an
+independent capability. Restrictive policies on channel A do **not** limit what a caller can do
+if they also hold channel B's ECI.
+
+### Why this is a design flaw
+
+Any installed ruleset can call `wrangler:createChannel` with a wide-open policy, e.g.
+`allow: [{domain: "*", name: "*"}]`. Anyone who learns that ECI can send or query anything the
+engine will deliver — **regardless of narrow policies on other channels** (subscription Tx/Rx,
+`manifold_callback`, UI channels, etc.).
+
+So channel policy does not provide **pico-level** access control. It only constrains callers who
+*only* know restricted ECIs. A single careless or malicious RS undermines every other channel's
+limitations. This matches the "trust every installed RS" problem but is structural in the engine,
+not just a Manifold coding mistake.
+
+Example in this repo: `io.picolabs.new_tag_registry.krl` creates a channel with
+`allow: [{domain: "*", name: "*"}]` — legitimate for that use case, but illustrates that any RS
+can mint a universal capability on the same pico where other channels are carefully scoped.
+
+### Required change (engine)
+
+**Must change** before channel policy can be treated as a meaningful security boundary:
+
+| Change | Rationale |
+|--------|-----------|
+| **Deny overrides permit** | Explicit deny wins over allow within one channel's policy (deny-by-default semantics) |
+| **Pico-level policy ceiling** | No channel on a pico may exceed a max policy for that pico type (owner / thing / community / registry) — channel templates enforced by engine or wrangler, not honor system |
+| **Restrict who may create channels** | App RSs should not mint arbitrary channels; platform/wrangler owns sensitive channel types |
+| **Optional: pico-wide deny list** | Engine-level denies that apply to every ECI on the pico regardless of per-channel allow |
+
+**Partial mitigation with SPIFFE (before full policy ceiling):** engine rule that any channel whose
+`eventPolicy` or `queryPolicy` includes a full wildcard (`domain: "*", name: "*"` or rid/fn
+equivalent) **must** require a validated SPIFFE ID on every request — not opt-in via
+`authPolicy`. ECI alone is insufficient on `*.*` channels. This does not fix permit-over-deny or
+capability union structurally, but **shrinks blast radius**: a leaked wide-open ECI is useless
+without a caller SVID the channel (or engine default) accepts. See SPIFFE section below.
+
+SPIFFE + Cedar (below) add identity and authorization at the engine door but **do not fully replace**
+fixing permit-over-deny and the capability-union problem — an `allow: *` channel still grants
+broad access to any **authorized SPIFFE principal** holding that ECI unless channel creation is
+capped or Cedar evaluates every request independently of per-channel permissiveness.
+
+Cross-ref: callback gotcha ([Gotcha: callback channel policy](#gotcha-callback-channel-policy-fixed))
+shows the opposite failure mode (too-narrow channel blocks a needed event) — both cases show
+channel policy is fragile without pico-level governance.
+
+## FUTURE: SPIFFE workload identity + Cedar policy — exploration 2026-06-09
+
+Revisit after PDS or when multi-engine / cross-host trust becomes a requirement. Goal:
+cryptographic **pico-to-pico (workload) identity** at the engine boundary, plus expressive
+**authorization** that does not depend on KRL rulesets behaving correctly.
+
+**SPIFFE solves workload identity; it does NOT solve human authentication.** Who controls a
+Manifold tree (owner, OIDC session, profile) remains a separate layer.
+
+### Problem today
+
+| Mechanism | What it provides | Weakness |
+|-----------|------------------|----------|
+| **ECI** | Capability URL for events/queries | Bearer token — possession = access |
+| **Channel policy** | Allow/deny by domain/name (and rid/fn for queries) | No cryptographic caller identity; **permit overrides deny**; **capability union across channels** — see [Design debt: channel policy](#design-debt-channel-policy--permit-overrides-deny-must-fix) |
+| **Installed rulesets** | Business logic, channel creation | **Trust in RS is a weak point** — any installed RS can create a wide-open channel (`allow: *`) that bypasses restrictions on all other channels for holders of that ECI |
+
+Channel policies assume every ruleset on that pico will do the right thing. They cannot prevent
+a buggy or malicious ruleset from opening another channel with no meaningful control. Even
+perfect per-channel policies fail while **permit overrides deny** and **any ECI on the pico can
+grant broader access than other ECIs** — engine change required (section above).
+
+### Design decisions (locked for exploration)
+
+1. **One SPIFFE ID per pico** — stable workload identity, separate from rotatable ECIs/channels.
+2. **Channels stay capabilities** — routing and coarse event/query filtering; not the identity.
+3. **Basic SPIFFE in the engine** — mint/verify SVIDs, trust anchor per engine instance.
+4. **Wrangler on top** — attach SPIFFE path at child creation; expose IDs to KRL; channel templates.
+5. **Within one engine** — trust in locally minted SVIDs is **implicit** (engine is the CA).
+6. **Between engines** — trust is **not** implicit; requires federation (trust bundles, path policy).
+7. **Optional SPIFFE on channel policies** — sensitive channels can require validated SVID + path prefix.
+8. **Cedar (or similar) in the engine** — authoritative policy evaluation outside KRL.
+9. **Wildcard channels require SPIFFE (engine-enforced)** — any channel with `allow: [{domain:"*", name:"*"}]`
+   (or query-policy `rid/fn` wildcard equivalent) **must** verify caller SVID on every request;
+   possession of the ECI alone is rejected. Limits blast radius of leaked wide-open ECIs and of
+   RS-created `*.*` channels until pico-level policy ceilings exist. Does not stop a co-installed
+   malicious RS from using the channel **as its own pico's outbound identity** — same-pico trust
+   problem remains; see `meta:callingRID()` / install curation.
+
+### SPIFFE ID hierarchy (sketch)
+
+Trust domain = one per engine deployment, e.g. `spiffe://manifold.example.com`.
+
+```
+spiffe://<td>/root
+spiffe://<td>/registry/tag
+spiffe://<td>/registry/skills
+spiffe://<td>/owner/<owner-uuid>
+spiffe://<td>/owner/<owner-uuid>/manifold
+spiffe://<td>/owner/<owner-uuid>/community/travel
+spiffe://<td>/owner/<owner-uuid>/thing/blue-backpack
+```
+
+Wrangler sets path at `new_child_request`. Aligns with Manifold tree (see architecture diagram
+in README).
+
+### Three enforcement layers
+
+```
+HTTP request
+  → (1) verify JWT-SVID or mTLS → SPIFFE ID of caller
+  → (2) resolve ECI → channel → eventPolicy/queryPolicy (domain/name/rid/fn)
+  → (3) optional authPolicy.requireSpiffe + allowed path prefixes
+  → (4) optional Cedar evaluate(principal, action, resource)
+  → deliver event/query to pico rulesets
+```
+
+| Layer | Question | Enforcer |
+|-------|----------|----------|
+| **Workload identity** | Which pico is calling? | Engine (SVID verify) |
+| **Channel gate** | Allowed on this ECI? | Engine (existing policies) |
+| **SPIFFE channel auth** | Allowed SPIFFE principal? | Engine (opt-in per channel) |
+| **Cedar policy** | Allowed action on resource? | Engine (future) |
+| **Human auth** | Which person is acting? | OIDC/session + owner pico (separate) |
+
+KRL rulesets should **not** be the source of truth for security decisions. Engine decides
+before events enter the pico. KRL handles orchestration on already-authorized events.
+
+### Engine vs wrangler split
+
+**Engine (minimal SPIFFE):**
+- CA / signing keys for trust domain
+- Mint JWT-SVID (and optionally X.509-SVID) per pico at creation; rotate on schedule
+- Verify SVID on inbound sky/event, sky/cloud (optional per route, required on sensitive channels)
+- Store `spiffeId` on pico record; publish JWKS / trust bundle for federation
+- Cedar policy store + evaluator (later phase)
+
+**Wrangler:**
+- SPIFFE path template on child creation
+- `wrangler:mySpiffeId()`, `wrangler:callerSpiffeId()` for KRL (informational — engine already verified)
+- Channel creation from **templates** per pico type (thing, community, registry) — limits what app RSs can declare
+- Does **not** embed Cedar; declares bindings the engine understands
+
+**Manifold / domain RSs:**
+- Subscriptions may record peer SPIFFE ID alongside ECI/picoID
+- Delegation callbacks (e.g. `community thing_created`) validated against parent Manifold SPIFFE ID
+
+### Optional SPIFFE on channel policy (sketch)
+
+Extend channel config without breaking existing picos:
+
+```json
+{
+  "tags": ["manifold_callback"],
+  "eventPolicy": {
+    "allow": [{ "domain": "community", "name": "thing_created" }],
+    "deny": []
+  },
+  "authPolicy": {
+    "requireSpiffe": true,
+    "allowedSpiffePathPrefixes": [
+      "spiffe://manifold.example.com/owner/*/manifold"
+    ]
+  }
+}
+```
+
+**Engine-enforced wildcard rule (design decision #9):** if `eventPolicy.allow` or
+`queryPolicy.allow` contains a full wildcard (`domain` and `name` both `"*"`, or rid/fn both
+`"*"` for queries), the engine **automatically** requires SPIFFE — `authPolicy.requireSpiffe`
+cannot be omitted. Rationale: `*.*` channels are the highest-risk capability-union bypass; tying
+them to workload identity means a leaked ECI is not enough for arbitrary internet callers.
+
+At channel creation, RS must supply `allowedSpiffePathPrefixes` (or engine applies a default from
+pico type, e.g. parent Manifold + subscription peers only). Example: tag registry registration
+channel with `allow: *` might allow `spiffe://…/registry/tag` and subscribed owner picos only.
+
+| Channel shape | SPIFFE |
+|---------------|--------|
+| Narrow allow (specific domain/name) | Optional `authPolicy.requireSpiffe` |
+| Full wildcard `*.*` | **Required** (engine-enforced) |
+| Leaked ECI, no valid SVID | Rejected on wildcard channels |
+
+- **Low-sensitivity channels** (dev UI, narrow allows): ECI + domain/name only.
+- **High-sensitivity channels** (`manifold_callback`, tag registry `registration`, Manifold app):
+  `requireSpiffe` + prefixes (phase 1) → Cedar (phase 2).
+- **Wildcard channels**: SPIFFE mandatory; prefixes define who may exercise the broad capability.
+
+Prefix matching is crude; Cedar replaces it for real policy.
+
+### Cedar policy direction
+
+Use [Cedar](https://www.cedarpolicy.com/) (or OPA/Rego) **in the engine**, not in KRL.
+
+- **Principal** = caller SPIFFE ID (workload)
+- **Action** = `Event::"community:thing_created"` or `Query::"io.picolabs.wrangler:channels"`
+- **Resource** = target pico SPIFFE ID
+- **Context** (optional) = human OIDC `sub` for owner-only operations
+
+Example intent (illustrative, not literal Cedar):
+
+```
+permit(
+  principal == spiffe::".../owner/alice/manifold",
+  action == Event::"community:thing_created",
+  resource == spiffe::".../owner/alice/community/garden"
+);
+```
+
+Cedar is deny-by-default and composable — unlike scattering hope across KRL RSs.
+
+**Human + workload:** Cedar policies may require both `principal` (SPIFFE) and `context.human`
+(OIDC) for UI-initiated operations vs pico-initiated delegation.
+
+### The KRL / ruleset trust problem
+
+SPIFFE fixes **cross-pico impersonation** and **engine-boundary** authentication. It does **not**
+fix a malicious RS running **inside** the same pico.
+
+Mitigations (layered):
+
+| Mitigation | Addresses |
+|------------|-----------|
+| **Deny-over-permit + pico policy ceiling** | Structural fix — see [Design debt: channel policy](#design-debt-channel-policy--permit-overrides-deny-must-fix) |
+| **Wildcard `*.*` requires SPIFFE (engine)** | Leaked wide-open ECI insufficient without caller SVID; mandatory on full wildcard allows |
+| Engine-owned sensitive channels | RS cannot replace `manifold_callback` with `allow: *` |
+| Channel templates per pico type | Cap policies at creation (thing vs community vs owner) |
+| `authPolicy.requireSpiffe` | Open channel useless without valid SVID from allowed prefix |
+| Cedar at engine | Permissive allow-list still fails if Cedar denies principal/action |
+| Install policy | Only wrangler/Manifold install RS; signed/allowlisted RIDs (longer term) |
+| Audit | Log SPIFFE ID + action for forensics |
+
+**Trust model summary:**
+- **SPIFFE** = who (workload)
+- **Cedar** = what (at the engine door)
+- **Ruleset curation** = what code runs inside the pico
+
+### Within-engine vs cross-engine trust
+
+**Single engine (phase 1):** engine mints and verifies SVIDs; no SPIRE deployment required.
+JWT-SVID fits HTTP sky APIs; X.509-SVID for mTLS if engine peers or external gateways need it.
+
+**Cross-engine (phase 2+):** each engine = own trust domain + bundle URL. Federation exports
+bundle; peer trusts selected path prefixes. Subscriptions across engines become federated
+workload trust, not shared ECIs. Real work — attestation, bundle rotation, path policy.
+
+Complements (not replaces) SafeAndMine **DIDs/tags** (public object identity for NFC/QR scans).
+
+### Human authentication (orthogonal)
+
+| Layer | Question | Technology |
+|-------|----------|------------|
+| Workload | Which pico is calling? | SPIFFE SVID |
+| Ownership | Who owns this Manifold tree? | Owner pico + bootstrap |
+| User session | Who is at the UI/API? | OIDC / session (legacy google/github signin in OLD/) |
+| Delegation | May this human act on this pico? | Consent or owner-as-sole-delegate |
+
+SPIFFE path under `…/owner/<uuid>/…` implies tree ownership structurally, but **proving the
+caller is that human** still requires OIDC/session — not SVID alone.
+
+### Node / JS SPIFFE libraries (for engine implementation)
+
+Go (`go-spiffe`) is production-grade. Node is thinner:
+
+| Package | Role | Notes |
+|---------|------|-------|
+| [`spiffe` npm (depot/node-spiffe)](https://github.com/depot/node-spiffe) | Workload API **client** | Fetches SVID from SPIRE agent; active but ~7 stars; **not minting** |
+| [`spiffile`](https://github.com/PeterSR/spiffile) | File-based ID + **`provision`** API | Zero deps, `node:crypto`; closer to **engine-as-CA** without SPIRE |
+| andyfurnival/spiffe-library | SPIRE demos | Stale (~2023) |
+
+**Likely approach:** engine implements mint/verify with `node:crypto` + JWT-SVID spec, or
+`spiffile` provision for dev/single-node. Use `spiffe` npm only if we adopt external SPIRE later.
+
+### Phased implementation path
+
+1. **SPIFFE ID per pico** in engine metadata; channels unchanged; no verify yet.
+2. **Mint JWT-SVID** at pico creation; wrangler exposes `mySpiffeId` / `callerSpiffeId`.
+3. **Optional verify** on sky APIs; **`authPolicy.requireSpiffe`** on Manifold callback, registry, app channel.
+4. **Channel templates** — restrict RS-created channels per pico type.
+5. **Cedar in engine** — principals = SPIFFE ID; actions = domain:name / rid:fn.
+6. **Cross-engine federation** — trust bundles, foreign subscription policy.
+
+### Open design questions
+
+- JWT-SVID vs X.509-SVID as default for sky HTTP? (JWT likely; X.509 for mTLS peers.)
+- Does ECI ever embed SPIFFE ID, or parallel `Authorization: Bearer` only?
+- Federation scope: entire owner subtree exportable, or per-community?
+- LoRa / edge gateways: SPIFFE for gateway→engine; sensor serial numbers = separate layer.
+- Cedar vs OPA: Cedar fits SPIFFE principals well; evaluate before committing.
 
 ## KRL conventions & gotchas (2026-06-04)
 

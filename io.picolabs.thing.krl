@@ -13,8 +13,11 @@ ruleset io.picolabs.thing {
         sub{"Tx_role"} == "community"
       }).map(function(sub) {
         cached = ent:communityInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-        name = cached{"name"} || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
-        description = cached{"description"} || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.community", "description");
+        pds_profile = wrangler:picoQuery(sub{"Tx"}, "io.picolabs.pds", "profile"){"profile"}.defaultsTo({});
+        name = cached{"name"} || pds_profile{"name"}
+                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
+        description = cached{"description"} || pds_profile{"description"}
+                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.community", "description");
         sub.put(cached).put({"name": name, "description": description})
       })
     }
@@ -52,8 +55,11 @@ ruleset io.picolabs.thing {
     pre {
       isCommunity = event:attr("Tx_role") == "community"
       community_eci = event:attr("Tx")
-      name = isCommunity => wrangler:picoQuery(community_eci, "io.picolabs.wrangler", "myself"){"name"} | null
-      description = isCommunity => wrangler:picoQuery(community_eci, "io.picolabs.community", "description") | null
+      pds_profile = isCommunity => wrangler:picoQuery(community_eci, "io.picolabs.pds", "profile"){"profile"}.defaultsTo({}) | {}
+      name = isCommunity => pds_profile{"name"}
+                    || wrangler:picoQuery(community_eci, "io.picolabs.wrangler", "myself"){"name"} | null
+      description = isCommunity => pds_profile{"description"}
+                    || wrangler:picoQuery(community_eci, "io.picolabs.community", "description") | null
     }
     if isCommunity then noop()
     fired {

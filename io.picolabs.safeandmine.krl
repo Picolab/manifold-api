@@ -3,11 +3,14 @@ ruleset io.picolabs.safeandmine {
     shares getInformation, getTags
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias sub
+    use module io.picolabs.pds alias pds
   }
   global {
 
+    safeandmine_ns = "safeandmine"
+
     getInformation = function(info) {
-      data = ent:contactInfo.defaultsTo({});
+      data = pds:items(safeandmine_ns, "contact"){"general"}.defaultsTo({});
       info => data{info} | data
     }
     
@@ -73,8 +76,18 @@ ruleset io.picolabs.safeandmine {
     if eci then noop();
     
     fired {
-      ent:registry_eci := eci;
-      ent:registry_host := host;
+      raise pds event "new_data_available"
+        attributes {
+          "namespace": safeandmine_ns,
+          "key": "registry_eci",
+          "value": eci
+        };
+      raise pds event "new_data_available"
+        attributes {
+          "namespace": safeandmine_ns,
+          "key": "registry_host",
+          "value": host
+        }
     }
   }
   
@@ -134,10 +147,11 @@ ruleset io.picolabs.safeandmine {
   rule information_update {
     select when safeandmine update
     pre {
-      name = event:attr("name").defaultsTo(ent:contactInfo{["name"]}).defaultsTo("").substr(0, META_FIELD_LENGTH)
-      email = event:attr("email").defaultsTo(ent:contactInfo{["email"]}).defaultsTo("").substr(0, META_FIELD_LENGTH)
-      phone = event:attr("phone").defaultsTo(ent:contactInfo{["phone"]}).defaultsTo("").substr(0, META_FIELD_LENGTH)
-      message = event:attr("message").defaultsTo(ent:contactInfo{["message"]}).defaultsTo("").substr(0, MESSAGE_CHAR_LENGTH)
+      existing = pds:items(safeandmine_ns, "contact"){"general"}.defaultsTo({});
+      name = event:attr("name").defaultsTo(existing{"name"}).defaultsTo("").substr(0, META_FIELD_LENGTH)
+      email = event:attr("email").defaultsTo(existing{"email"}).defaultsTo("").substr(0, META_FIELD_LENGTH)
+      phone = event:attr("phone").defaultsTo(existing{"phone"}).defaultsTo("").substr(0, META_FIELD_LENGTH)
+      message = event:attr("message").defaultsTo(existing{"message"}).defaultsTo("").substr(0, MESSAGE_CHAR_LENGTH)
       attrs = {
         "name" : name,
         "email" : email,
@@ -149,7 +163,12 @@ ruleset io.picolabs.safeandmine {
       }
     }
     always {
-      ent:contactInfo := ent:contactInfo.defaultsTo({}).put(attrs);
+      raise pds event "new_data_available"
+        attributes {
+          "namespace": safeandmine_ns,
+          "key": "contact",
+          "value": attrs
+        }
     }
     
   }
@@ -164,9 +183,18 @@ ruleset io.picolabs.safeandmine {
     if toDelete then noop();
     
     notfired {
-      ent:contactInfo := {}
+      raise pds event "remove_old_data"
+        attributes {
+          "namespace": safeandmine_ns,
+          "key": "contact"
+        }
     } else {
-      ent:contactInfo := ent:contactInfo.delete([toDelete])
+      raise pds event "new_data_available"
+        attributes {
+          "namespace": safeandmine_ns,
+          "key": "contact",
+          "value": pds:items(safeandmine_ns, "contact"){"general"}.defaultsTo({}).delete([toDelete])
+        }
     }
     
   }
@@ -194,7 +222,7 @@ ruleset io.picolabs.safeandmine {
   rule check_tag_registry {
     select when safeandmine new_tag
     pre {
-      eci = ent:registry_eci
+      eci = pds:items(safeandmine_ns, "registry_eci"){"general"}
     }
     if eci.isnull() then noop() 
     fired {
@@ -224,10 +252,11 @@ ruleset io.picolabs.safeandmine {
       tagID = event:attr("tagID");
       domain = event:attr("domain");
       channel = event:attr("channel"){"id"};
+      registry_eci = pds:items(safeandmine_ns, "registry_eci"){"general"};
     }
     
-    if tagID && domain && channel && ent:registry_eci then
-      event:send({"eci": ent:registry_eci, 
+    if tagID && domain && channel && registry_eci then
+      event:send({"eci": registry_eci, 
                   "domain": "safeandmine", 
                   "name": "register_tag", 
                   "attrs" : { "tagID" : tagID, 
@@ -280,10 +309,11 @@ ruleset io.picolabs.safeandmine {
     pre {
       tagToDelete = event:attr("tagID");
       domain = event:attr("domain");
+      registry_eci = pds:items(safeandmine_ns, "registry_eci"){"general"};
     }
     
-    if tagToDelete && domain && ent:registry_eci then
-      event:send({"eci": ent:registry_eci, "domain": "safeandmine", "name": "deregister_tag", "attrs" : { "tagID" : tagToDelete, "domain" : domain } });
+    if tagToDelete && domain && registry_eci then
+      event:send({"eci": registry_eci, "domain": "safeandmine", "name": "deregister_tag", "attrs" : { "tagID" : tagToDelete, "domain" : domain } });
   }
 
   rule deregister_tag_cleanup {
@@ -337,7 +367,7 @@ ruleset io.picolabs.safeandmine {
       picoId = wrangler:myself(){"id"};
       app = "SafeAndMine";
       rid = meta:rid;
-      name = wrangler:name();
+      name = pds:profile("name"){"profile"} || wrangler:name();
       message = "Your tag " + tagID + " has been scanned";
       attrs = { 
         "picoId" : picoId,

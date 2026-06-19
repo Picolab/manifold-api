@@ -1,5 +1,6 @@
 ruleset io.picolabs.profile {
   meta {
+    use module io.picolabs.pds alias pds
     shares getProfile, getEmail, getPhone, getOwnerPhone, getOwnerEmail
   }
   global {
@@ -7,24 +8,24 @@ ruleset io.picolabs.profile {
     profile_fields = ["name", "email", "phone"];
 
     getProfile = function() {
-      ent:profile.defaultsTo({})
+      pds:profile(){"profile"}.defaultsTo({})
     }
 
     getEmail = function() {
-      ent:profile{"email"}
+      pds:profile("email"){"profile"}
     }
 
     getPhone = function() {
-      ent:profile{"phone"}
+      pds:profile("phone"){"profile"}
     }
 
     // Aliases used by the Manifold notification platform (SMS / future Email).
     getOwnerEmail = function() {
-      ent:profile{"email"}
+      pds:profile("email"){"profile"}
     }
 
     getOwnerPhone = function() {
-      ent:profile{"phone"}
+      pds:profile("phone"){"profile"}
     }
   }
 
@@ -40,6 +41,9 @@ ruleset io.picolabs.profile {
       email_provided = not (email.isnull() || email == "")
       phone_provided = not (phone.isnull() || phone == "")
       any_provided = name_provided || email_provided || phone_provided
+      attrs_step1 = name_provided => {"name": name} | {};
+      attrs_step2 = email_provided => attrs_step1.put(["email"], email) | attrs_step1;
+      update_attrs = phone_provided => attrs_step2.put(["phone"], phone) | attrs_step2;
     }
     if any_provided then
       send_directive("profile updated", {
@@ -48,10 +52,7 @@ ruleset io.picolabs.profile {
         "phone": phone_provided => phone | null
       })
     fired {
-      ent:profile := ent:profile.defaultsTo({});
-      ent:profile{"name"} := name if name_provided;
-      ent:profile{"email"} := email if email_provided;
-      ent:profile{"phone"} := phone if phone_provided;
+      raise pds event "updated_profile" attributes update_attrs
     }
   }
 
@@ -60,11 +61,15 @@ ruleset io.picolabs.profile {
     select when profile clear
     pre {
       field = event:attr("field")
+      clear_attrs = (field == "name") => {"name": ""}
+                    | (field == "email") => {"email": ""}
+                    | (field == "phone") => {"phone": ""}
+                    | {}
     }
     if field && (profile_fields >< field) then
       send_directive("profile field cleared", {"field": field})
     fired {
-      ent:profile := ent:profile.defaultsTo({}).delete([field])
+      raise pds event "updated_profile" attributes clear_attrs
     }
   }
 }

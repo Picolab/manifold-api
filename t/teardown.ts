@@ -12,15 +12,20 @@ export async function teardown(
     return;
   }
 
-  if (opts.keep || !passed) {
-    console.log("\nLeaving test container running for inspection:");
+  if (opts.keep) {
+    console.log("\nLeaving test container running (--keep):");
     console.log(formatRuntimeSummary(runtime));
-    if (!passed) {
-      console.log("\nFix the failure, then stop manually:");
-      console.log(`  docker rm -f ${runtime.containerName}`);
-      console.log(`  rm -rf ${runtime.picoEngineHome}`);
-    }
     return;
+  }
+
+  if (!passed) {
+    console.log("\nTest run failed. Tearing down container:");
+    console.log(formatRuntimeSummary(runtime));
+    if (!opts.retainLogs) {
+      console.log(
+        "\nTip: use --keep to leave the container up, or --retain-logs to keep pico home on disk."
+      );
+    }
   }
 
   await teardownRuntime(runtime, { retainLogs: opts.retainLogs });

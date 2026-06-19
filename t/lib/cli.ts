@@ -49,8 +49,8 @@ export function printCliHelp(): void {
   console.log(`Usage: tsx t/run.ts [options]
 
 Options:
-  --keep           Leave the container running after tests (even on success)
-  --retain-logs    Keep PICO_ENGINE_HOME on disk after a successful run
+  --keep           Leave the container running after tests (pass or fail)
+  --retain-logs    Keep PICO_ENGINE_HOME on disk after teardown (pass or fail)
   --skip-docker    Skip container start/stop (parse and scenarios only)
   --skip-parse     Skip krl-compiler verification
   --config <path>  Alternate t/config.json path

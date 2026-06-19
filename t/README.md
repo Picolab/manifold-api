@@ -21,9 +21,8 @@ npm test
   ├─ 3. Scenarios      TypeScript functions in t/scenarios/
   │                    signal events, query picos, assert outcomes
   │
-  └─ 4. Teardown       pass  → stop container, delete pico home (unless --retain-logs)
-                       fail  → leave container running for inspection
-                       --keep → never stop container
+  └─ 4. Teardown       always stop container (unless --keep)
+                       delete pico home (unless --retain-logs)
 ```
 
 ## Prerequisites
@@ -42,6 +41,15 @@ Build or pull if needed ([pico-engine Dockerfile](https://github.com/Picolab/pic
 
 ```bash
 docker build -t picolabs/pico-engine:latest https://github.com/Picolab/pico-engine.git
+```
+
+**PDS (Phase F):** tests expect `io.picolabs.pds` bundled in the engine. Until `picolabs/pico-engine:latest`
+on Docker Hub includes PDS, build from a local pico-engine checkout:
+
+```bash
+cd ../pico-engine
+docker build -f Dockerfile.local -t picolabs/pico-engine:local .
+export PICO_ENGINE_IMAGE=picolabs/pico-engine:local
 ```
 
 Override the image without editing config:
@@ -80,18 +88,17 @@ npm test -- --skip-parse
 # Parse only, no container (same as test:parse)
 npm test -- --skip-docker
 
-# After a failure — container was left running; inspect then clean up
-cat t/.runtime.json
-open $(node -p "require('./t/.runtime.json').baseUrl")   # engine UI
-docker rm -f $(node -p "require('./t/.runtime.json').containerName")
+# After a failure — inspect logs on disk if you used --retain-logs, or re-run with --keep
+cat t/.runtime.json   # only present while a --keep run is active
+open $(node -p "require('./t/.runtime.json').baseUrl")   # engine UI (--keep)
 
-# Keep pico DB/logs on disk after success for post-mortem
+# Keep pico DB/logs on disk for post-mortem (pass or fail)
 npm test -- --retain-logs
 
-# Leave container running even when everything passes
+# Leave container running for live inspection
 npm run test:keep
 
-# Remove containers and logs left by test:keep or failed runs
+# Remove containers and logs left by test:keep
 npm run test:cleanup
 npm run test:cleanup -- --dry-run
 ```
@@ -101,7 +108,7 @@ npm run test:cleanup -- --dry-run
 | Flag | Effect |
 |------|--------|
 | `--keep` | Never stop the container (success or failure) |
-| `--retain-logs` | After **success**, keep `/tmp/manifold-api-pico-test-*` on disk |
+| `--retain-logs` | Keep `/tmp/manifold-api-pico-test-*` on disk after teardown |
 | `--skip-docker` | Skip container start/stop; run parse (and any non-Docker scenarios) only |
 | `--skip-parse` | Skip `krl-compiler` verification |
 | `--config <path>` | Use a different config file instead of `t/config.json` |
@@ -116,13 +123,11 @@ Environment:
 
 ## Inspecting a failed run
 
-When any scenario throws, teardown **leaves the container running** and prints:
+By default, teardown **always removes the container** when the run finishes (pass or fail).
+Use **`--keep`** to leave the container running for live inspection, or **`--retain-logs`** to
+delete the container but keep pico state under `/tmp/...` on the host.
 
-- Container name and ID
-- Base URL (engine UI and HTTP API)
-- Path to pico engine home on the host
-
-**Runtime state** is saved in `t/.runtime.json` (gitignored):
+While a **`--keep`** run is active, runtime state is saved in `t/.runtime.json` (gitignored):
 
 ```json
 {
@@ -134,19 +139,16 @@ When any scenario throws, teardown **leaves the container running** and prints:
 }
 ```
 
-Useful next steps:
+Useful next steps after a failure:
 
-1. Open **http://localhost:&lt;hostPort&gt;** — pico-engine developer UI.
-2. Read the engine log: `$PICO_ENGINE_HOME/pico-engine.log` (on the host path from `.runtime.json`).
-3. `docker logs manifold-api-pico-test-...`
-4. When done: `docker rm -f <containerName>` and optionally `rm -rf <picoEngineHome>`.
-
-After a **successful** run, the container and pico home are removed by default (unless
-`--retain-logs` or `--keep`).
+1. Re-run with `npm test -- --keep` or `npm test -- --retain-logs`.
+2. Open **http://localhost:&lt;hostPort&gt;** — pico-engine developer UI (`--keep` only).
+3. Read the engine log: `$PICO_ENGINE_HOME/pico-engine.log` (with `--retain-logs` or `--keep`).
+4. `docker logs manifold-api-pico-test-...` (`--keep` only).
 
 ### Bulk cleanup (`npm run test:cleanup`)
 
-After `test:keep` or a failed run, remove **all** test resources for this repo:
+After `test:keep`, remove **all** test resources for this repo:
 
 ```bash
 npm run test:cleanup              # stop containers + delete /tmp/...-pico-test-* dirs

@@ -11,6 +11,7 @@ ruleset io.picolabs.manifold_bootstrap {
       4) Create a skills registry child pico and install io.picolabs.manifold.skills_registry,
          providing a queryable directory of skills (with MCP tool definitions) that can
          be added to things.
+      PDS (io.picolabs.pds) is default-installed by the pico-engine on every pico.
       All steps follow the bootstrap architecture described in the Manifold-api README.
     >>
     use module io.picolabs.wrangler alias wrangler

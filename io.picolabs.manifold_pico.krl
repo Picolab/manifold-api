@@ -260,7 +260,7 @@ ruleset io.picolabs.manifold_pico {
     }
     if child_eci && absoluteURL then every {
       send_directive("installing io.picolabs.community on new community",
-                     {"child_eci": child_eci, "absoluteURL": absoluteURL})
+                     {"child_eci": child_eci, "absoluteURL": absoluteURL});
       event:send({
         "eci": child_eci,
         "domain": "wrangler",
@@ -307,6 +307,16 @@ ruleset io.picolabs.manifold_pico {
         "domain": "community",
         "type": "new_description",
         "attrs": { "description": description }
+      });
+      event:send({
+        "eci": eci,
+        "eid": "pds_profile",
+        "domain": "pds",
+        "type": "updated_profile",
+        "attrs": {
+          "name": event:attr("name"),
+          "description": description
+        }
       })
     }
   }
@@ -489,8 +499,15 @@ ruleset io.picolabs.manifold_pico {
       changedName = event:attr("changedName");
     }
 
-    if not (picoID.isnull() || changedName.isnull()) then
+    if not (picoID.isnull() || changedName.isnull()) then every {
       send_directive("THINGS", { "things list" : ent:things });
+      event:send({
+        "eci": picoID,
+        "domain": "pds",
+        "type": "updated_profile",
+        "attrs": {"name": changedName}
+      })
+    }
 
     fired {
       ent:things{[picoID, "name"]} := changedName;
