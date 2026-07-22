@@ -1,5 +1,13 @@
 ruleset io.picolabs.safeandmine {
   meta {
+    name "SafeAndMine"
+    description <<
+      Electronic name tag for a Manifold thing. Register QR or NFC tags on the
+      thing, set owner contact information, and let finders scan a tag to see
+      how to return the item. You receive a notification when a tag is scanned.
+    >>
+    author "Pico Labs"
+
     shares getInformation, getTags
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias sub
@@ -20,11 +28,72 @@ ruleset io.picolabs.safeandmine {
       });
     }
     
-    app = {"name":"safeandmine","version":"0.0"/* img: , pre: , ..*/};
+    // Discovery: `app` and `bindings()` are returned by the discovery rule in response
+    // to `discovery capabilities`. Integrators (HA, Manifold UI, etc.) use them to learn what
+    // this ruleset exposes — not internal KRL rule names. See pico-engine docs: krl/discovery.md
+    app = {
+      "name": "safeandmine",
+      "title": "SafeAndMine",
+      "version": "0.0",
+      "description": "QR/NFC name tags: register tags on this thing and share owner contact info when scanned."
+    };
     bindings = function(){
       {
-        //currently no bindings
-      };
+        "version": 1,
+        "queries": [
+          {
+            "name": "getInformation",
+            "args": ["info"],
+            "description": "Owner contact info shown to finders (all fields, or one field by name)."
+          },
+          {
+            "name": "getTags",
+            "description": "Tag IDs registered on this thing."
+          }
+        ],
+        "events": [
+          {
+            "domain": "safeandmine",
+            "name": "update",
+            "attrs": ["name", "email", "phone", "message", "shareName", "sharePhone", "shareEmail"],
+            "description": "Set or update owner contact information."
+          },
+          {
+            "domain": "safeandmine",
+            "name": "delete",
+            "attrs": ["toDelete"],
+            "description": "Remove one contact field or all contact info."
+          },
+          {
+            "domain": "safeandmine",
+            "name": "notify",
+            "attrs": ["tagID"],
+            "description": "Raised when someone scans a registered tag (also forwarded as a notification)."
+          },
+          {
+            "domain": "safeandmine",
+            "name": "new_tag",
+            "attrs": ["tagID", "domain"],
+            "description": "Register a QR or NFC tag on this thing."
+          },
+          {
+            "domain": "safeandmine",
+            "name": "deregister",
+            "attrs": ["tagID", "domain"],
+            "description": "Remove a registered tag from this thing."
+          }
+        ],
+        "notifications": {
+          "trigger": {"domain": "safeandmine", "name": "notify", "attrs": ["tagID"]},
+          "forward": {
+            "pico": "manifold",
+            "domain": "manifold",
+            "name": "add_notification",
+            "attrs": ["picoId", "thing", "app", "message", "ruleset"]
+          },
+          "channels": ["Manifold", "SMS", "Prowl", "HomeAssistant"]
+        }
+      }
     }
     
     getPolicyID = function(){
@@ -92,19 +161,19 @@ ruleset io.picolabs.safeandmine {
   }
   
   rule discovery { 
-    select when manifold apps 
-    send_directive("app discovered...", 
+    select when discovery capabilities 
+    send_directive("discovery capability", 
                    {
                     "app": app, 
                     "rid": meta:rid, 
-                    "bindings": bindings(), 
+                    "bindings": wrangler:filterBindingsForCaller(bindings(), event:attr("eci"), meta:rid), 
                     "iconURL": "https://raw.githubusercontent.com/Picolab/SafeAndMine/master/logo.svg"
                    } 
                   ); 
   }
 
   rule update_tag_store {
-    select when manifold apps
+    select when discovery capabilities
     
     pre {
       domains = ent:tagStore.defaultsTo({}).values().klog("Values");
@@ -121,28 +190,6 @@ ruleset io.picolabs.safeandmine {
     }
     
   }
-  
-  /* ----- deprecated ----
-  rule update_policy {
-    select when safeandmine update_policy
-    
-    pre {
-      exists = getPolicyID()
-    }
-    if exists.isnull() then 
-      engine:newPolicy(policy);
-  }
-  
-  rule create_policy {
-    select when wrangler ruleset_added where event:attr("rids") >< ctx:rid
-    
-    pre {
-      exists = getPolicyID()
-    }
-    if exists.isnull() then 
-      engine:newPolicy(policy);
-  }
-  ---- deprecated ---- */
   
   rule information_update {
     select when safeandmine update
@@ -214,7 +261,8 @@ ruleset io.picolabs.safeandmine {
         raise safeandmine event "new_tag_channel"
           attributes {
             "tagID" : tagID.uc(),
-            "domain" : domain
+            "domain" : domain,
+            "pico_host" : event:attr("pico_host")
           }
       }
   }
@@ -253,6 +301,7 @@ ruleset io.picolabs.safeandmine {
       domain = event:attr("domain");
       channel = event:attr("channel"){"id"};
       registry_eci = pds:items(safeandmine_ns, "registry_eci"){"general"};
+      pico_host = event:attr("pico_host").defaultsTo(meta:host);
     }
     
     if tagID && domain && channel && registry_eci then
@@ -262,7 +311,7 @@ ruleset io.picolabs.safeandmine {
                   "attrs" : { "tagID" : tagID, 
                               "DID" : channel, 
                               "domain" : domain,
-                              "pico_host": meta:host 
+                              "pico_host": pico_host 
                             } 
                   });
      

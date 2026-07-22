@@ -2,19 +2,34 @@
 
 Working context so we don't lose it across sessions.
 
-## WHERE WE ARE (2026-06-09)
+## WHERE WE ARE (2026-06-20)
 
 ### Summary
 The sensor network → Manifold migration is **working** in both manual testing and automated
-integration tests. **manifold-api** harness: parse → Docker → bootstrap → **14 scenarios** →
-teardown (~18s on Node 22). **sensor-network** harness: same stack via `dependsOn` +
-`manifoldApiPath` → **5 scenarios** → teardown (~10s). PDS **Phase A–F done** (engine default-install + Manifold hooks removed).
+integration tests. **manifold-api** harness: parse → Docker → bootstrap → **17 tests** (6 scenario
+files) → teardown (~18s on Node 22). **sensor-network** harness: same stack via `dependsOn` +
+`manifoldApiPath` → **5 scenarios** → teardown (~10s). PDS **Phase A–F done** (pico-engine **1.4.0**
+default-installs PDS; Manifold bootstrap install hooks removed).
 
-Both repos pushed to GitHub (`windley/manifold-api`, `windley/sensor-network`; the latter
-renamed from `temperature-network`).
+**pico-engine 1.4.0** released (npm published): bundled PDS, UI deadlock fix ([#493](https://github.com/Picolab/pico-engine/issues/493)), schedule cleanup on pico delete ([#578](https://github.com/Picolab/pico-engine/issues/578)), module cycle rejection at flush ([#577](https://github.com/Picolab/pico-engine/issues/577)). CI pinned to Node 20/22 after Node 24 broke krl-parser ava timeouts on GitHub Actions.
 
-**Recommended runtime:** Node **22 LTS** (project requires 18+; 20 is maintenance-only).
-After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
+Both app repos pushed to GitHub: **[Picolab/manifold-api](https://github.com/Picolab/manifold-api)**,
+**[windley/sensor-network](https://github.com/windley/sensor-network)** (renamed from
+`temperature-network`).
+
+**Recommended runtime:** Node **22 LTS** (project requires 18+; pico-engine CI tests 20 and 22).
+Engine requirement: **pico-engine 1.4+** (`npm install -g pico-engine@1.4.0` or Docker image).
+
+**Confluence / developer docs** (in `docs/`):
+- [`docs/Manifold.md`](docs/Manifold.md) — framework overview for documentation site
+- [`docs/Managing_PDS.md`](docs/Managing_PDS.md) — PDS data model, events, security
+
+### Recent commits (2026-06)
+| Repo | Commit | Summary |
+|------|--------|---------|
+| pico-engine | `5878bdf4` … `f18f9233` | 1.4.0: PDS default-install, UI fix #493, #578, #577, CI Node pin |
+| manifold-api | `f261545` | PDS adoption across rulesets; PDS scenario + helpers + docs |
+| sensor-network | `c25d6bd` | PDS display names; bootstrap enrichment; scenario assertions |
 
 ### Verified working (manual, 2026-06-04)
 - Profile on owner pico
@@ -36,13 +51,16 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 
 ### Still open / not fully verified
 - **Notification delivery (external)** — Manifold inbox works when provisioned; SMS/Prowl need
-  Twilio/Prowl config on Manifold pico + owner profile phone. Sensor communities get Manifold
-  channel via `network_bootstrap` `community_ready`; external channels opt-in per community.
+  Twilio/Prowl config on Manifold pico + owner phone (PDS profile or profile shim). Sensor
+  communities get Manifold channel via `network_bootstrap` `community_ready`; external channels
+  opt-in per community.
 - **Parse gate** — `npm run test:parse` fails on 2 pending-review RSs: `io.picolabs.alexa.krl`,
   `io.picolabs.google_assistant.krl` (undefined `rids` in select). Fix or add to `parseExclude`
 - **SafeAndMine tags** — register/deregister scenarios pass in harness; real NFC/QR flow not
   fully verified in production
-- **CI** — local harness only; no GitHub Actions yet
+- **CI** — manifold-api and sensor-network: local harness only; no GitHub Actions yet. pico-engine
+  has Actions workflow (Node 20/22 matrix).
+- **Confluence** — `docs/Manifold.md` ready to publish; `docs/Managing_PDS.md` in repo
 
 ### Integration test harness (WORKING — 2026-06-08)
 
@@ -51,7 +69,8 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 **Decisions locked in:**
 - Option 3: TypeScript integration tests against a real engine
 - **Single Docker container** per `npm test` run; image default `picolabs/pico-engine:latest`
-  (override `PICO_ENGINE_IMAGE` or `t/config.json` → `dockerImage`)
+  (override `PICO_ENGINE_IMAGE` or `t/config.json` → `dockerImage`). Use **1.4+** image for PDS
+  default-install; `:local` / from-source builds are ~700MB but include unreleased-at-build-time bits.
 - Host port random **5001–6999**; `PICO_ENGINE_HOME` on host at
   `/tmp/<repoName>-pico-test-<runId>` mounted as `/var/pico-image`
 - Container env: `TESTING=1`, `PICO_ENGINE_BASE_URL=http://localhost:<port>`
@@ -80,11 +99,12 @@ After upgrade: `nvm install 22 && nvm use 22 && npm install && npm test`.
 |------|----------|
 | `health.scenario.ts` | Engine HTTP reachable |
 | `bootstrap.scenario.ts` | Tag registry, skills registry, owner, manifold picos |
+| `pds.scenario.ts` | PDS installed on bootstrap picos; profile/general read/write |
 | `thing-community.scenario.ts` | Create thing/community, add/remove, delete |
 | `safeandmine.scenario.ts` | Contact info, tag-scan notification, tag registry register/deregister |
 | `journal.scenario.ts` | Install journal on thing, create/edit/delete entries |
 
-**Helpers:** `t/lib/tag-registry.ts`, `t/lib/safeandmine.ts`, `t/lib/journal.ts`,
+**Helpers:** `t/lib/pds.ts`, `t/lib/tag-registry.ts`, `t/lib/safeandmine.ts`, `t/lib/journal.ts`,
 `t/lib/notifications.ts`, `t/lib/manifold.ts`
 
 **Harness gotchas (learned 2026-06-08):**
@@ -118,15 +138,17 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 
 **Next harness phases:**
 1. ~~Docker layer + parse gate~~ ✓
-2. ~~manifold-api scenarios (bootstrap, thing/community, safeandmine, journal)~~ ✓ (14 tests)
+2. ~~manifold-api scenarios (bootstrap, pds, thing/community, safeandmine, journal)~~ ✓ (17 tests)
 3. ~~sensor-network/t — `dependsOn` manifold-api, sensor bootstrap + initiation scenarios~~ ✓ (5 tests)
 4. Sensor readings/threshold + notification scenarios in sensor-network (optional)
 5. Test RS for open channels / scenario conductor (optional)
 
-### README / docs (2026-06-09)
+### README / docs (2026-06-20)
 - Root README: architecture diagram (`manifold_network.png`), per-pico bullets, notifications
   section (centralized fan-out via `io.picolabs.notifications`).
 - `t/README.md`: cross-repo `manifoldApiPath` for dependent repos.
+- `docs/Manifold.md`: Confluence-ready framework overview (architecture, bootstrap, extending).
+- `docs/Managing_PDS.md`: PDS developer contract, namespaces, security model.
 
 ### SafeAndMine tag registry (fixed for tests — 2026-06-08)
 
@@ -151,7 +173,7 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 `tag_register_response` with `"name"` not `"type"`.
 
 ### Parked
-- **PDS + mirrors** — see FUTURE section below; **engine-default PDS** + pico event schema + selective log/replay; security in [`docs/Managing_PDS.md`](docs/Managing_PDS.md#security-model); profile works on owner pico for now
+- **Pico mirrors + event schema** — see FUTURE section below; PDS default-install ✓; selective log/replay not started
 - **Channel policy engine fix** — permit-over-deny + pico-level ceiling; see [Design debt: channel policy](#design-debt-channel-policy--permit-overrides-deny-must-fix)
 - **SPIFFE + Cedar policy** — see FUTURE section below; exploration only, not implemented
 
@@ -159,10 +181,12 @@ process env. Use `meta:rulesetConfig{"testing"}` on install and/or a test-only R
 
 ## Two repos involved
 - `manifold-api` (this repo, `/Users/pjw/Dropbox/prog/picolabs/manifold-api`) — the Manifold
-  KRL rulesets being updated for Pico Engine 1.0. Think of Manifold as the "OS".
+  KRL rulesets for Pico Engine 1.4+. GitHub: **[Picolab/manifold-api](https://github.com/Picolab/manifold-api)**.
+  Think of Manifold as the "OS".
 - `sensor-network` (`/Users/pjw/Dropbox/prog/picolabs/sensor-network`) — the real sensor
-  network. Think of it as an "application" running on Manifold. GitHub: `windley/sensor-network`
-  (renamed from `temperature-network`, 2026-06-09).
+  network. Think of it as an "application" running on Manifold. GitHub:
+  **[windley/sensor-network](https://github.com/windley/sensor-network)** (renamed from
+  `temperature-network`, 2026-06-09).
   - NOTE: ignore the `wovyn.*` rulesets in that repo (legacy/parallel).
   - NOTE: the `neighborhood_temps` ruleset in `manifold-api` is a separate gossip teaching
     example, NOT the sensor network. Red herring.
@@ -554,7 +578,8 @@ Manifold pico (app-specific; NOT in manifold_pico initializationRids).
   `sensor_bootstrap` attr on `child_initialized`) installs `io.picolabs.sensor.community` and
   records `ent:sensor_communities`. Do NOT gate finish on `ent:pending{rcn}` alone — rcn may not
   correlate; pending is used for notify_channels when rcn matches.
-- Query `getSensorCommunities()` lists communities created by this bootstrap on this Manifold pico.
+- Query `getSensorCommunities()` lists communities; names/descriptions enriched from **PDS profile**
+  on each community pico (2026-06).
 - Notification provisioning: `sensor community_ready` -> `manifold change_notification_setting`
   per channel (default Manifold only; override notify_channels e.g. "Manifold,SMS,Prowl").
 - Channels: NO bootstrap work -- sensor.community create_channels handles `sensor` +
@@ -562,12 +587,15 @@ Manifold pico (app-specific; NOT in manifold_pico initializationRids).
 - Still required separately: sensor-network ruleset registration (meta:rulesetURI), owner
   profile phone, Twilio/Prowl config on Manifold pico for external notification delivery.
 
-## FUTURE: Personal Data Store (PDS) — pinned 2026-06-04, direction locked 2026-06-09, revised 2026-06-13
+## FUTURE: Personal Data Store (PDS) — **Phase A–F complete (2026-06-20)**
 
-Revisit after community/sensor testing. Goal: a Manifold-era PDS inspired by CloudOS and Fuse,
-not a port of the old ruleset. **Broader platform goal (2026-06-13):** picos should be
-**copyable** and **networks of picos reconstructible** — PDS + selective event logging is the
-foundation for **pico mirrors** (see below).
+PDS is **shipped**: pico-engine **1.4.0** default-installs `io.picolabs.pds` on root and every
+child at creation. Manifold rulesets read/write display names and contact data via PDS; redundant
+Manifold bootstrap PDS install hooks removed. Developer doc:
+[`docs/Managing_PDS.md`](docs/Managing_PDS.md).
+
+**Remaining PDS-adjacent work** (not blocking Manifold): pico event schema, selective logging,
+mirrors — see platform direction below.
 
 ### Platform direction (revised 2026-06-13)
 
@@ -580,16 +608,15 @@ engine-default today; PDS should join it at that layer.
 |-------|----------|
 | **Required RS** | Not optional, not Manifold-only plumbing — every pico gets PDS like Wrangler |
 | **Why PDS over raw `ent:*`** | Entity vars are already RS-scoped; the win is a **stable contract** so platform enhancements (auth, validation, audit, **mirror/replay hooks**) land in one place without every app reinventing storage |
-| **Delivery** | **Pico-engine update** — bundle/default-install PDS alongside Wrangler; register ruleset in engine distribution |
-| **Manifold until engine ships** | Interim: Manifold bootstrap may still install PDS explicitly; remove duplicate once engine defaults it |
-| **Engine batch opportunity** | Same engine release can tackle other queued repo issues (channel policy, SPIFFE sketch, default ruleset bundle, …) |
+| **Delivery** | **Done in pico-engine 1.4.0** — bundled/default-install alongside Wrangler |
+| **Manifold bootstrap** | No longer installs PDS explicitly (engine handles it) |
+| **Engine batch (1.4.0)** | Also shipped: UI deadlock #493, schedule #578, module cycles #577 |
 
 - **Source:** [`PDS.krl`](https://github.com/Picolab/wrangler/blob/master/PDS.krl) in
   [Picolab/wrangler](https://github.com/Picolab/wrangler) — adapt for Engine 1.0; local copy
   `io.picolabs.pds.krl` in this repo (parse fixes pending). Fork only if Wrangler upstream gaps
   require Manifold-specific changes.
-- **Profile migration path:** owner contact info (`io.picolabs.profile`) eventually folds into
-  PDS on the owner pico; until then profile-on-owner remains the SMS recipient source.
+- **Profile migration path:** owner contact and display names use **PDS profile**; `io.picolabs.profile` is a shim.
 - **Start thin when implementing:** profile slice first; extend to general/settings layers.
 
 ### Manifold direction (decided 2026-06-09, superseded for install policy)
@@ -693,16 +720,13 @@ and replayable by default** — the platform substrate for mirrors.
 - **Reactive settings** — rules select on `pds new_settings_available` to reconfigure.
 - **Uninstall cleanup** — `explicit application_uninstalled` clears `ent:settings{appid}`.
 
-### Manifold today (gaps)
-- `io.picolabs.profile` on **owner pico only** — `{name, email, phone}`; no shared contract elsewhere.
-- Names/identity scattered:
-  - Wrangler: `wrangler:myself(){"name"}` (creation-time pico metadata)
-  - Manifold pico: `ent:things{picoID.name}`, `ent:communities{...}`
-  - Community/thing: `ent:thingInfo` / `ent:communityInfo` caches + `picoQuery` fallback to wrangler
-  - Apps: e.g. safeandmine `ent:contactInfo`, sensor events pass `pico_name` / `sensor_name` attrs
-- No central elements registry, no per-ruleset settings store, no write-through-event contract.
-- Delegation/correlation (`ent:pending{rcn}`) solves the same *class* of problem as Fuse's PDS-stored
-  `fleet_channel`, but ad hoc per app.
+### Manifold today (post–Phase D/E, 2026-06)
+- **`io.picolabs.pds`** on every pico (engine default-install); local fork `io.picolabs.pds.krl` in repo for dev flush.
+- **`io.picolabs.profile`** on owner pico — shim over PDS for backward-compatible queries/events.
+- Display names: thing, community, safeandmine, notifications read **`pds:profile("name")`** (with wrangler fallbacks where needed).
+- Manifold pico syncs thing/community renames via **`pds updated_profile`** events.
+- Sensor-network: community/thing names and threshold attrs use PDS; bootstrap **`getSensorCommunities()`** enriches from PDS profile.
+- Delegation/correlation (`ent:pending{rcn}`) remains ad hoc per app (not PDS).
 
 ### Key insight (2026-06-04)
 **PDS on every pico standardizes how common elements like names get stored.** Wrangler has a name
@@ -722,7 +746,7 @@ Docker rebuild per PDS edit. Promote to engine default only when contract is sta
 | **C** | Harness proof | manifold-api | scenario: PDS installed, `pds` channel, query/write profile + general on owner/thing ✓ |
 | **D** | Migrate **manifold-api** rulesets to use PDS | manifold-api | profile shim, thing/community names+description, safeandmine contact/registry, notifications phone ✓ |
 | **E** | Migrate **sensor-network** rulesets to use PDS | sensor-network | thresholds + community names/notifications; bootstrap reads PDS profile ✓ |
-| **F** | Engine default-install PDS | pico-engine | bundle `io.picolabs.pds`; wrangler child init + root startup; remove Manifold install hooks ✓ |
+| **F** | Engine default-install PDS | pico-engine | bundle `io.picolabs.pds`; wrangler child init + root startup; remove Manifold install hooks ✓ **(released 1.4.0)** |
 
 **D vs E:** Installing PDS on picos (B) does not require apps to read/write it. **D** is
 Manifold platform/app RS adoption in this repo. **E** is domain app adoption in sensor-network —
@@ -1227,6 +1251,9 @@ was fixed 2026-06-04.
 - **`picoQuery` not `skyQuery`** — required for family-channel queries (e.g. profile phone).
 
 ## Reference
+- **Home Assistant (hub + companions):**
+  [`../manifold-home-assistant/MEMORY.md`](../manifold-home-assistant/MEMORY.md) ·
+  sensor-network companion in [`../sensor-network/MEMORY.md`](../sensor-network/MEMORY.md)
 - Plan file: `.cursor/plans/manifold_thing-creation_delegation_c0b87a0d.plan.md`
 - Fuse delegation + correlation patterns: `/Users/pjw/prog/kynetx/Fuse-API/api/fuse_fleet.krl`
   (`create_vehicle`/`create_vehicle_check` ~404-485; `report_correlation_number` ~766-960).

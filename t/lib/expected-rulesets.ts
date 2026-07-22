@@ -27,6 +27,7 @@ export const MANIFOLD_RULESETS = [
   "io.picolabs.notifications",
   "io.picolabs.twilio.sms",
   "io.picolabs.prowl",
+  "io.picolabs.homeassistant",
 ] as const;
 
 /** Installed when manifold_pico creates a thing child (PDS is engine-default; thing RS init installs safeandmine). */

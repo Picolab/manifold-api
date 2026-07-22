@@ -92,7 +92,8 @@ ruleset io.picolabs.manifold_pico {
 
     initializationRids = ["io.picolabs.notifications",
                           "io.picolabs.twilio.sms",
-                          "io.picolabs.prowl"
+                          "io.picolabs.prowl",
+                          "io.picolabs.homeassistant"
                         ]
     
     appChannelName = "Manifold"
@@ -564,7 +565,8 @@ ruleset io.picolabs.manifold_pico {
     select when manifold update_version
     foreach ["io.picolabs.notifications",
              "io.picolabs.twilio.sms",
-             "io.picolabs.prowl"].difference(wrangler:installedRulesets()).klog("needed") setting(rid)
+             "io.picolabs.prowl",
+             "io.picolabs.homeassistant"].difference(wrangler:installedRulesets()).klog("needed") setting(rid)
       pre {
         absoluteURL = meta:rulesetURI;
       }

@@ -9,9 +9,10 @@ ruleset io.picolabs.notifications {
     // addNotification. Any externally-supplied channel name is validated against
     // this list.
     channels = [
-      "Manifold", // record in the in-app inbox (ent:notifications) + badge count
-      "SMS",      // send an SMS via the owner's Twilio account (io.picolabs.twilio.sms)
-      "Prowl"     // send a push notification via the owner's Prowl account (io.picolabs.prowl)
+      "Manifold",       // record in the in-app inbox (ent:notifications) + badge count
+      "SMS",            // send an SMS via the owner's Twilio account (io.picolabs.twilio.sms)
+      "Prowl",          // send a push notification via the owner's Prowl account (io.picolabs.prowl)
+      "HomeAssistant"   // forward to HA integration channel (io.picolabs.homeassistant)
     ];
 
     // Default settings for a subject pico, derived from `channels`: the in-app
@@ -80,6 +81,7 @@ ruleset io.picolabs.notifications {
       // SMS recipient is the owner's phone from the profile on the parent (owner)
       // pico. Only resolved when SMS is actually enabled for this subject.
       sms_on = isEnabled(picoId, "SMS");
+      ha_on = isEnabled(picoId, "HomeAssistant");
       to_phone = sms_on => wrangler:picoQuery(wrangler:parent_eci(),
                                              "io.picolabs.pds",
                                              "profile",
@@ -106,7 +108,9 @@ ruleset io.picolabs.notifications {
       raise twilio event "notify_through_twilio" attributes notify_attrs
         if sms_on;
       raise prowl event "notify_through_prowl" attributes notify_attrs
-        if isEnabled(picoId, "Prowl")
+        if isEnabled(picoId, "Prowl");
+      raise homeassistant event "notify_through_homeassistant" attributes notification
+        if ha_on
     }
   }
 

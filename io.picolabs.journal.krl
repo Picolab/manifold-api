@@ -1,6 +1,15 @@
 ruleset io.picolabs.journal {
   meta {
+    name "Journal"
+    description <<
+      Attach notes to a Manifold thing. Each entry has a title and body text;
+      use this to record maintenance history, packing lists, or anything else
+      you want to keep with the thing.
+    >>
+    author "Pico Labs"
+
     shares getEntry
+    use module io.picolabs.wrangler alias wrangler
   }
   
   global {
@@ -12,17 +21,57 @@ ruleset io.picolabs.journal {
       })[0] | ent:entries;
     }
     
-    app = {"name":"journal","version":"0.0"/* img: , pre: , ..*/};
-    bindings = function(){
-      {
-        //currently no bindings
-      };
+    app = {
+      "name": "journal",
+      "title": "Journal",
+      "version": "0.0",
+      "description": "Attach notes to this thing (title + content entries)."
+    };
+    bindings = function() {
+      return {
+        "version": 1,
+        "queries": [
+          {
+            "name": "getEntry",
+            "args": ["title"],
+            "description": "Return one entry by title, or all entries when title is omitted."
+          }
+        ],
+        "events": [
+          {
+            "domain": "journal",
+            "name": "new_entry",
+            "attrs": ["title", "content"],
+            "description": "Add a note to this thing."
+          },
+          {
+            "domain": "journal",
+            "name": "delete_entry",
+            "attrs": ["timestamp"],
+            "description": "Remove a note by its entry timestamp."
+          },
+          {
+            "domain": "journal",
+            "name": "edit_entry",
+            "attrs": ["newContent", "timestamp"],
+            "description": "Change the body text of an existing note."
+          }
+        ]
+      }
     }
     
   }
   
   // icon image from https://image.flaticon.com/icons/svg/201/201642.svg
-  rule discovery { select when manifold apps send_directive("app discovered...", {"app": app, "rid": meta:rid, "bindings": bindings(), "iconURL": "https://raw.githubusercontent.com/Picolab/JournalApp/master/logo.svg"} ); }
+  rule discovery {
+    select when discovery capabilities
+    send_directive("discovery capability", {
+      "app": app,
+      "rid": meta:rid,
+      "bindings": wrangler:filterBindingsForCaller(bindings(), event:attr("eci"), meta:rid),
+      "iconURL": "https://raw.githubusercontent.com/Picolab/JournalApp/master/logo.svg"
+    });
+  }
   
   
   rule new_entry {

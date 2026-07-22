@@ -152,6 +152,21 @@ Current scenarios cover Manifold bootstrap (tag registry, owner, Manifold pico),
 
 The sibling **sensor-network** repo reuses this harness via `dependsOn` and `manifoldApiPath` (default `../manifold-api`); see its `t/README.md`.
 
+## Home Assistant
+
+The **[manifold-home-assistant](https://github.com/Picolab/manifold-home-assistant)** integration (`pico_mesh`) is the Manifold hub for Home Assistant — OAuth, thing/community devices, and discovery-driven SafeAndMine and Journal entities.
+
+Rulesets in this repo that support HA:
+
+| Ruleset | Role |
+|---------|------|
+| `io.picolabs.homeassistant` | Notification channel and pending-notification queue on the Manifold pico |
+| `io.picolabs.safeandmine` | Discovery bindings + tag/contact events for HA entities |
+| `io.picolabs.journal` | Discovery bindings + journal events for HA todo panel |
+| `io.picolabs.new_tag_registry` | Tag registration (on-engine delivery for Docker/HA) |
+
+Domain-specific companions (e.g. sensor-network → `pico_mesh_sensor_network`) ship beside their KRL repos. See [CHANGELOG.md](CHANGELOG.md).
+
 ## File Conventions
 
 - All rulesets use the `.krl` extension (some legacy files omit it but are valid KRL)

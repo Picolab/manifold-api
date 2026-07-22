@@ -28,11 +28,13 @@ ruleset io.picolabs.new_tag_registry {
       map = { "did" : did, "pico_host" : pico_host, "redirect_url" : redirect_url }
     }
     
-    if tagID && domain && notRegistered then 
-      event:send({"eci": did, "domain" : "safeandmine", "name" : "tag_register_response", "attrs" : { "tagID" : tagID, "domain" : domain, "DID" : did}}, pico_host);
+    // Deliver on-engine (no host): HTTP event:send to docker service names like
+    // pico-engine:3000 fails channel auth (401) because only localhost bypasses session.
+    if tagID && domain && did then
+      event:send({"eci": did, "domain" : "safeandmine", "name" : "tag_register_response", "attrs" : { "tagID" : tagID, "domain" : domain, "DID" : did}});
     
-    fired {
-      ent:tag_store := ent:tag_store.defaultsTo({}).put([domain, tagID], map);
+    always {
+      ent:tag_store := (tagID && domain && notRegistered) => ent:tag_store.defaultsTo({}).put([domain, tagID], map) | ent:tag_store.defaultsTo({})
     }
   }
   

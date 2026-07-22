@@ -16,7 +16,7 @@ export async function enableNotificationChannel(
   state: RuntimeState,
   manifoldAppEci: string,
   picoId: string,
-  channel: "Manifold" | "SMS" | "Prowl"
+  channel: "Manifold" | "SMS" | "Prowl" | "HomeAssistant"
 ): Promise<void> {
   const settings = await query<Record<string, boolean> | null>(
     state,
