@@ -16,6 +16,8 @@ All notable changes to Manifold platform rulesets in this repository.
 
 ### Changed
 
+- **`io.picolabs.community`** — disabled `broadcastThingEvent` (rule commented out). Automatic fan-out of `thing_event_occurred` to other members is deferred until the design is revisited; use `community raise_thing_event` or `raise_all_things_event` for explicit broadcasts. Fixes sensor-network feedback loops when multiple sensors share a community.
+
 - **`io.picolabs.safeandmine`** — discovery rule uses `discovery capabilities` and `filterBindingsForCaller`.
 - **`io.picolabs.journal`** — same discovery pattern; wrangler module for binding filter.
 - **`io.picolabs.manifold_pico`** — installs `io.picolabs.homeassistant` when needed.

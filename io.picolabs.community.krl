@@ -206,21 +206,24 @@ ruleset io.picolabs.community {
     })
   }
 
-  rule broadcastThingEvent {
-    select when community thing_event_occurred
-    foreach things() setting(thing)
-    pre {
-      sender_id = event:attr("sender_id")
-      domain = event:attr("domain")
-      type = event:attr("type")
-      attrs = event:attr("attrs")
-    }
-    if sender_id.isnull() || thing{"id"} != sender_id then
-    event:send({
-      "eci": thing{"Tx"}, "eid": "community_broadcast",
-      "domain": domain, "type": type, "attrs": attrs
-    })
-  }
+  // Disabled pending redesign: automatic fan-out of thing_event_occurred to other
+  // community members caused feedback loops (e.g. sensor-network with multiple
+  // sensors). Use community raise_thing_event / raise_all_things_event explicitly.
+  // rule broadcastThingEvent {
+  //   select when community thing_event_occurred
+  //   foreach things() setting(thing)
+  //   pre {
+  //     sender_id = event:attr("sender_id")
+  //     domain = event:attr("domain")
+  //     type = event:attr("type")
+  //     attrs = event:attr("attrs")
+  //   }
+  //   if sender_id.isnull() || thing{"id"} != sender_id then
+  //   event:send({
+  //     "eci": thing{"Tx"}, "eid": "community_broadcast",
+  //     "domain": domain, "type": type, "attrs": attrs
+  //   })
+  // }
 
   rule addEventSequence {
     select when community add_sequence
