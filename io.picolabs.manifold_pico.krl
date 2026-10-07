@@ -225,7 +225,7 @@ ruleset io.picolabs.manifold_pico {
       thing_eci = event:attr("Tx");
       cb = ent:pending_callbacks.defaultsTo({}){picoID};
     }
-    if cb then
+    if cb then every {
       event:send({
         "eci": cb{"callback_eci"},
         "eid": "thing_created",
@@ -236,7 +236,19 @@ ruleset io.picolabs.manifold_pico {
           "thingPicoID": picoID,
           "thing_eci": thing_eci
         }
+      });
+      event:send({
+        "eci": cb{"callback_eci"},
+        "eid": "thing_completed",
+        "domain": "community",
+        "type": "thing_completed",
+        "attrs": {
+          "rcn": cb{"rcn"},
+          "thingPicoID": picoID,
+          "thing_eci": thing_eci
+        }
       })
+    }
     fired {
       ent:pending_callbacks := ent:pending_callbacks.filter(function(v, k) { k != picoID });
     }
@@ -274,6 +286,25 @@ ruleset io.picolabs.manifold_pico {
     }
     notfired {
       error warn <<install_community_ruleset skipped: child_eci=#{child_eci} absoluteURL=#{absoluteURL}>>;
+    }
+  }
+
+  // Community-creation delegation: same callback_eci + rcn pattern as things.
+  rule stashCommunityCallback {
+    select when wrangler child_initialized where event:attr("event_name") == "manifold_new_community"
+    pre {
+      eci = event:attr("eci");
+      callback_eci = event:attr("callback_eci");
+      rcn = event:attr("rcn");
+    }
+    if eci && callback_eci && rcn then
+      send_directive("Registering community-creation callback", { "rcn": rcn })
+    fired {
+      ent:pending_community_callbacks := ent:pending_community_callbacks.defaultsTo({});
+      ent:pending_community_callbacks{eci} := {
+        "callback_eci": callback_eci,
+        "rcn": rcn
+      };
     }
   }
 
@@ -319,6 +350,31 @@ ruleset io.picolabs.manifold_pico {
           "description": description
         }
       })
+    }
+  }
+
+  // Notify delegating pico once the community's manifold subscription exists.
+  rule fireCommunityCreatedCallback {
+    select when wrangler subscription_added where event:attr("Tx_role") == community_role
+    pre {
+      picoID = event:attr("picoID");
+      community_eci = event:attr("Tx");
+      cb = ent:pending_community_callbacks.defaultsTo({}){picoID};
+    }
+    if cb then
+      event:send({
+        "eci": cb{"callback_eci"},
+        "eid": "community_completed",
+        "domain": "community",
+        "type": "community_completed",
+        "attrs": {
+          "rcn": cb{"rcn"},
+          "communityPicoID": picoID,
+          "community_eci": community_eci
+        }
+      })
+    fired {
+      ent:pending_community_callbacks := ent:pending_community_callbacks.filter(function(v, k) { k != picoID });
     }
   }
 
@@ -393,12 +449,10 @@ ruleset io.picolabs.manifold_pico {
     if picoID && subID && sub then
       every {
         event:send({ "eci" : sub{"Tx"}, "domain" : "apps", "type" : "cleanup", "attrs" : {} }); //Jace added this event send to allow each app a chance to clean up.
-        send_directive("Attempting to cancel subscription to Thing", { "thing": ent:things{[picoID, "name"]} })
+        send_directive("Attempting to cancel subscription to Thing", { "thing": ent:things{[picoID, "name"]} });
+        raise wrangler event "subscription_cancellation"
+          attributes {"Id": sub{"Id"}, "picoID": picoID, "event_type": "thing_deletion"}
       }
-    fired {
-      raise wrangler event "subscription_cancellation"
-        attributes {"Id": sub{"Id"}, "picoID": picoID, "event_type": "thing_deletion"}
-    }
   }
   rule deleteThing {
     select when wrangler subscription_removed where event:attr("event_type") == "thing_deletion"
@@ -422,11 +476,13 @@ ruleset io.picolabs.manifold_pico {
       sub = subscription:established("Id", subID)[0].klog("found sub: ");
     }
     if picoID && subID && sub then
-      send_directive("Attempting to cancel subscription to Community", {"community":event:attr("name")})
-    fired{
-      raise wrangler event "subscription_cancellation"
-        attributes { "Id": sub{"Id"}, "picoID": picoID, "event_type": "community_deletion" }
-    }
+      every {
+        send_directive("Attempting to cancel subscription to Community", {
+          "community": ent:communities{[picoID, "name"]}.defaultsTo(event:attr("name"))
+        });
+        raise wrangler event "subscription_cancellation"
+          attributes { "Id": sub{"Id"}, "picoID": picoID, "event_type": "community_deletion" }
+      }
   }
   rule deleteCommunity {
     select when wrangler subscription_removed where event:attr("event_type") == "community_deletion"
