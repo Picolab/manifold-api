@@ -218,7 +218,12 @@ Fold the sensor network into Manifold's data model:
 - **Callback is contingent.** The completion callback fires only when BOTH `callback_eci` and
   `rcn` (correlation id) are present on the `create_thing` event. Without them, Manifold's
   `create_thing` behaves exactly as before. Delegation is purely additive.
-- **No scheduled "wait" events.** Use an event-driven callback correlated by `rcn`.
+- **Always prefer callbacks to scheduling.** Scheduling is non-deterministic (stale timers, wrong
+  delays, KRL postlude footguns). Use an event-driven callback correlated by `rcn` and fire
+  `community:thing_completed` / `community:community_completed` when the Manifold subscription
+  exists — never `schedule` a "maybe it's ready yet?" poll.
+- **Parse before commit.** Run `npm run test:parse` in this repo before every commit that touches
+  `*.krl`. `raise` cannot go inside `every { }` (parser error: Expected `(`).
 - **Correlation pattern** (from Fuse `report_correlation_number`, in
   `/Users/pjw/prog/kynetx/Fuse-API/api/fuse_fleet.krl`): the delegating pico mints an `rcn`,
   stores context under it in an entity var, passes only `{callback_eci, rcn}` through the chain,

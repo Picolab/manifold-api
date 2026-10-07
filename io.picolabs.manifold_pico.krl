@@ -446,13 +446,14 @@ ruleset io.picolabs.manifold_pico {
       sub = subscription:established("Id", subID)[0].klog("found sub: ");
     }
 
-    if picoID && subID && sub then
-      every {
-        event:send({ "eci" : sub{"Tx"}, "domain" : "apps", "type" : "cleanup", "attrs" : {} }); //Jace added this event send to allow each app a chance to clean up.
-        send_directive("Attempting to cancel subscription to Thing", { "thing": ent:things{[picoID, "name"]} });
-        raise wrangler event "subscription_cancellation"
-          attributes {"Id": sub{"Id"}, "picoID": picoID, "event_type": "thing_deletion"}
-      }
+    if picoID && subID && sub then every {
+      event:send({ "eci" : sub{"Tx"}, "domain" : "apps", "type" : "cleanup", "attrs" : {} });
+      send_directive("Attempting to cancel subscription to Thing", { "thing": ent:things{[picoID, "name"]} })
+    }
+    fired {
+      raise wrangler event "subscription_cancellation"
+        attributes {"Id": sub{"Id"}, "picoID": picoID, "event_type": "thing_deletion"}
+    }
   }
   rule deleteThing {
     select when wrangler subscription_removed where event:attr("event_type") == "thing_deletion"
@@ -475,14 +476,15 @@ ruleset io.picolabs.manifold_pico {
       subID = subIDFromPicoID(picoID, ent:communities).klog("found subID: ");
       sub = subscription:established("Id", subID)[0].klog("found sub: ");
     }
-    if picoID && subID && sub then
-      every {
-        send_directive("Attempting to cancel subscription to Community", {
-          "community": ent:communities{[picoID, "name"]}.defaultsTo(event:attr("name"))
-        });
-        raise wrangler event "subscription_cancellation"
-          attributes { "Id": sub{"Id"}, "picoID": picoID, "event_type": "community_deletion" }
-      }
+    if picoID && subID && sub then every {
+      send_directive("Attempting to cancel subscription to Community", {
+        "community": ent:communities{[picoID, "name"]}.defaultsTo(event:attr("name"))
+      })
+    }
+    fired {
+      raise wrangler event "subscription_cancellation"
+        attributes { "Id": sub{"Id"}, "picoID": picoID, "event_type": "community_deletion" }
+    }
   }
   rule deleteCommunity {
     select when wrangler subscription_removed where event:attr("event_type") == "community_deletion"
