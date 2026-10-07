@@ -93,7 +93,8 @@ ruleset io.picolabs.manifold_pico {
     initializationRids = ["io.picolabs.notifications",
                           "io.picolabs.twilio.sms",
                           "io.picolabs.prowl",
-                          "io.picolabs.homeassistant"
+                          "io.picolabs.homeassistant",
+                          "io.picolabs.manifold_import"
                         ]
     
     appChannelName = "Manifold"

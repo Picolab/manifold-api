@@ -24,10 +24,12 @@ export const OWNER_RULESETS = [
 export const MANIFOLD_RULESETS = [
   PDS_RID,
   "io.picolabs.manifold_pico",
+  "io.picolabs.manifold_import",
   "io.picolabs.notifications",
   "io.picolabs.twilio.sms",
   "io.picolabs.prowl",
   "io.picolabs.homeassistant",
+  "io.picolabs.portable_subtree",
 ] as const;
 
 /** Installed when manifold_pico creates a thing child (PDS is engine-default; thing RS init installs safeandmine). */
