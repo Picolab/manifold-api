@@ -71,6 +71,20 @@ ruleset io.picolabs.manifold_pico {
       theMapToCheck.defaultsTo({}){[picoID, "subID"]}
     }
 
+    /** Manifold ↔ thing bus on this pico (registry subID may be stale after failed import). */
+    thingManifoldSub = function(picoID) {
+      subID = subIDFromPicoID(picoID, ent:things)
+      byId = subID.isnull() == false && subID != ""
+        => subscription:established("Id", subID)[0]
+        | null
+      byId.isnull() == false => byId |
+      subscription:established("picoID", picoID)[0].isnull() == false
+        => subscription:established("picoID", picoID)[0] |
+      subscription:established().filter(function(b) {
+        b{"Tx_role"} == thing_role && b{"picoID"} == picoID
+      }).head()
+    }
+
     isAChild = function(picoID) {
       children = wrangler:children() // .klog("Children in isAChild()");
       childIDs = children.map(function(child) {
@@ -480,19 +494,60 @@ ruleset io.picolabs.manifold_pico {
     select when manifold remove_thing
     pre {
       picoID = event:attr("picoID");
-      subID = subIDFromPicoID(picoID, ent:things).klog("found subID: ");
-      sub = subscription:established("Id", subID)[0].klog("found sub: ");
+      sub = thingManifoldSub(picoID);
     }
 
-    if picoID && subID && sub then every {
-      event:send({ "eci" : sub{"Tx"}, "domain" : "apps", "type" : "cleanup", "attrs" : {} });
-      send_directive("Attempting to cancel subscription to Thing", { "thing": ent:things{[picoID, "name"]} })
+    if picoID && sub.isnull() == false then every {
+      send_directive("Attempting to cancel subscription to Thing", {
+        "thing": ent:things{[picoID, "name"]}
+      })
     }
     fired {
       raise wrangler event "subscription_cancellation"
         attributes {"Id": sub{"Id"}, "picoID": picoID, "event_type": "thing_deletion"}
     }
   }
+
+  rule removeThingOrphan {
+    select when manifold remove_thing
+    pre {
+      picoID = event:attr("picoID");
+      indexed = picoID.isnull() == false
+        && ent:things.defaultsTo({}).keys() >< picoID;
+      child = picoID.isnull() == false && isAChild(picoID);
+      sub = thingManifoldSub(picoID);
+      orphan = sub.isnull() && (indexed || child);
+    }
+    if picoID && orphan then
+      send_directive("Removing thing without established Manifold subscription", {
+        "picoID": picoID,
+        "name": ent:things{[picoID, "name"]},
+        "indexed": indexed,
+        "child": child
+      })
+    fired {
+      ent:things := ent:things.filter(function(thing, key) { key != picoID });
+    }
+  }
+
+  rule removeThingOrphanChild {
+    select when manifold remove_thing
+    pre {
+      picoID = event:attr("picoID");
+      sub = thingManifoldSub(picoID);
+      child = picoID.isnull() == false && isAChild(picoID);
+    }
+    if picoID && sub.isnull() && child then
+      send_directive("Removing orphan Thing child pico", {
+        "thing": ent:things{[picoID, "name"]},
+        "picoID": picoID
+      })
+    fired {
+      raise wrangler event "child_deletion_request"
+        attributes { "eci": picoID }
+    }
+  }
+
   rule deleteThing {
     select when wrangler subscription_removed where event:attr("event_type") == "thing_deletion"
     pre {
