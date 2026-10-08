@@ -13,8 +13,10 @@ ruleset io.picolabs.manifold_portable_thing {
         raise manifold event "enable_portable_thing"
         → installs io.picolabs.portable_subtree then this ruleset (use module order)
 
-      Export (query — same pattern as portable_subtree:exportSubtree):
+      Export (query on Manifold app channel):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
+        → { blob, name, donorQueryEci, subtreeRootPicoId, thingFamilyPicoID }
+        (secret is input only — not echoed.) Use name / donorQueryEci on import when helpful.
 
       Import (event on Manifold app channel):
         raise manifold event "import_portable_thing"
@@ -24,6 +26,7 @@ ruleset io.picolabs.manifold_portable_thing {
     author "PICOLABS"
 
     use module io.picolabs.wrangler alias wrangler
+    use module io.picolabs.manifold_pico alias manifold_pico
     use module io.picolabs.subscription alias subscription
     use module io.picolabs.portable_subtree alias portable_subtree
 
@@ -39,9 +42,62 @@ ruleset io.picolabs.manifold_portable_thing {
       parts.splice(parts.length() - 1, 1, THING_RID + ".krl").join("/")
     }
 
-    /** Pass-through to portable_subtree (read-only). */
+    thingRegistryRowByFamily = function(subtreeRootPicoId) {
+      manifold_pico:getThings()
+        .filter(function(row) { row{"picoId"} == subtreeRootPicoId })
+        .head()
+    }
+
+    childToExportContext = function(child) {
+      family = child{"eci"}
+      reg = manifold_pico:getThings()
+        .filter(function(row) { row{"picoId"} == family })
+        .head()
+      donor_q = reg{"Tx"}.defaultsTo(
+        subscription:established("Id", reg{"subID"}).head(){"Tx"}
+      )
+      return {
+        "thingFamilyPicoID": family,
+        "name": reg{"name"}.defaultsTo(child{"name"}),
+        "donorQueryEci": donor_q
+      }
+    }
+
+    thingExportContextByInternalId = function(subtreeRootPicoId) {
+      wrangler:children()
+        .filter(function(c) {
+          wrangler:picoQuery(c{"eci"}, "io.picolabs.wrangler", "id", {})
+            == subtreeRootPicoId
+        })
+        .map(function(child) { childToExportContext(child) })
+        .head()
+        .defaultsTo({})
+    }
+
+    /** Resolve Manifold registry + donor query channel for a thing export. */
+    thingExportContext = function(subtreeRootPicoId) {
+      byFamily = thingRegistryRowByFamily(subtreeRootPicoId)
+      byFamily.isnull() == false => {}.put("thingFamilyPicoID", byFamily{"picoId"})
+        .put("name", byFamily{"name"})
+        .put("donorQueryEci", byFamily{"Tx"})
+        | thingExportContextByInternalId(subtreeRootPicoId)
+    }
+
     exportPortableThing = function(subtreeRootPicoId, secret) {
-      portable_subtree:exportSubtree(subtreeRootPicoId, secret)
+      blob = portable_subtree:exportSubtree(subtreeRootPicoId, secret)
+      ctx = thingExportContext(subtreeRootPicoId)
+      family = ctx{"thingFamilyPicoID"}
+      name = ctx{"name"}.defaultsTo(
+        family.isnull() => null |
+        wrangler:picoQuery(family, "io.picolabs.wrangler", "name", {})
+      )
+      return {
+        "blob": blob,
+        "subtreeRootPicoId": subtreeRootPicoId,
+        "thingFamilyPicoID": family,
+        "name": name,
+        "donorQueryEci": ctx{"donorQueryEci"}
+      }
     }
 
     lastImport = function() {
