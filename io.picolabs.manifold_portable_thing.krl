@@ -7,7 +7,8 @@ ruleset io.picolabs.manifold_portable_thing {
 
       Layering (follow this pattern for other mesh apps):
         portable_subtree — generic export/import (dido/wrangler); opt-in from engine /krl/
-        this ruleset — Manifold-specific registration only (subscription, thing RS)
+        this ruleset — Manifold-specific portable move (export hints, import registration)
+        manifold_pico — unchanged; read registry via use module getThings() only
 
       Opt-in on Manifold (not installed at bootstrap):
         raise manifold event "enable_portable_thing"
@@ -16,7 +17,9 @@ ruleset io.picolabs.manifold_portable_thing {
       Export (query on Manifold app channel):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
         → { blob, name, donorQueryEci, subtreeRootPicoId, thingFamilyPicoID }
-        (secret is input only — not echoed.) Use name / donorQueryEci on import when helpful.
+        name is the Manifold thing label (ent:things). subtreeRootPicoId may be any channel
+        ECI on the thing (including the About tab UI ECI), family ECI, or internal pico id.
+        Secret is input only — not echoed.
 
       Import (event on Manifold app channel):
         raise manifold event "import_portable_thing"
@@ -42,61 +45,69 @@ ruleset io.picolabs.manifold_portable_thing {
       parts.splice(parts.length() - 1, 1, THING_RID + ".krl").join("/")
     }
 
-    thingRegistryRowByFamily = function(subtreeRootPicoId) {
-      manifold_pico:getThings()
-        .filter(function(row) { row{"picoId"} == subtreeRootPicoId })
-        .head()
+    registeredThings = function() {
+      things = manifold_pico:getThings()
+      things.typeof() == "Array" => things | things.values()
     }
 
-    childToExportContext = function(child) {
-      family = child{"eci"}
-      reg = manifold_pico:getThings()
-        .filter(function(row) { row{"picoId"} == family })
-        .head()
-      donor_q = reg{"Tx"}.defaultsTo(
-        subscription:established("Id", reg{"subID"}).head(){"Tx"}
-      )
+    thingInternalPicoId = function(familyPicoID) {
+      id = wrangler:picoQuery(familyPicoID, "io.picolabs.wrangler", "id", {})
+      id.typeof() == "String" => id | null
+    }
+
+    thingExportHintsFromRegistry = function(row) {
       return {
-        "thingFamilyPicoID": family,
-        "name": reg{"name"}.defaultsTo(child{"name"}),
-        "donorQueryEci": donor_q
+        "thingFamilyPicoID": row{"picoId"},
+        "name": row{"name"},
+        "donorQueryEci": row{"Tx"}
       }
     }
 
-    thingExportContextByInternalId = function(subtreeRootPicoId) {
+    thingExportHintsFromChild = function(ref, lookupRef) {
       wrangler:children()
         .filter(function(c) {
-          wrangler:picoQuery(c{"eci"}, "io.picolabs.wrangler", "id", {})
-            == subtreeRootPicoId
+          c{"eci"} == ref
+            || c{"eci"} == lookupRef
+            || thingInternalPicoId(c{"eci"}) == lookupRef
         })
-        .map(function(child) { childToExportContext(child) })
+        .map(function(c) {
+          return {
+            "thingFamilyPicoID": c{"eci"},
+            "name": c{"name"},
+            "donorQueryEci": null
+          }
+        })
         .head()
         .defaultsTo({})
     }
 
-    /** Resolve Manifold registry + donor query channel for a thing export. */
-    thingExportContext = function(subtreeRootPicoId) {
-      byFamily = thingRegistryRowByFamily(subtreeRootPicoId)
-      byFamily.isnull() == false => {}.put("thingFamilyPicoID", byFamily{"picoId"})
-        .put("name", byFamily{"name"})
-        .put("donorQueryEci", byFamily{"Tx"})
-        | thingExportContextByInternalId(subtreeRootPicoId)
+    /**
+     * Manifold import hints for a thing export ref (any channel ECI, family ECI, or internal id).
+     * name — human label from getThings() / ent:things, not wrangler id.
+     */
+    thingExportHints = function(ref) {
+      internal = wrangler:picoQuery(ref, "io.picolabs.wrangler", "id", {})
+      lookupRef = internal.typeof() == "String" => internal | ref
+      row = registeredThings()
+        .filter(function(r) {
+          r{"picoId"} == ref
+            || r{"picoId"} == lookupRef
+            || thingInternalPicoId(r{"picoId"}) == lookupRef
+        })
+        .head()
+      row.isnull() == false => thingExportHintsFromRegistry(row)
+        | thingExportHintsFromChild(ref, lookupRef)
     }
 
     exportPortableThing = function(subtreeRootPicoId, secret) {
       blob = portable_subtree:exportSubtree(subtreeRootPicoId, secret)
-      ctx = thingExportContext(subtreeRootPicoId)
-      family = ctx{"thingFamilyPicoID"}
-      name = ctx{"name"}.defaultsTo(
-        family.isnull() => null |
-        wrangler:picoQuery(family, "io.picolabs.wrangler", "name", {})
-      )
+      hints = thingExportHints(subtreeRootPicoId)
       return {
         "blob": blob,
         "subtreeRootPicoId": subtreeRootPicoId,
-        "thingFamilyPicoID": family,
-        "name": name,
-        "donorQueryEci": ctx{"donorQueryEci"}
+        "thingFamilyPicoID": hints{"thingFamilyPicoID"},
+        "name": hints{"name"},
+        "donorQueryEci": hints{"donorQueryEci"}
       }
     }
 

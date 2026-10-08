@@ -29,7 +29,6 @@ ruleset io.picolabs.manifold_pico {
       })
     }
 
-
     hasTutorial = function() {
       ent:tutorial.defaultsTo(false);
     }
