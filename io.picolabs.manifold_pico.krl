@@ -91,6 +91,7 @@ ruleset io.picolabs.manifold_pico {
     }
 
     PORTABLE_SUBTREE_RID = "io.picolabs.portable_subtree"
+    MANIFOLD_PORTABLE_THING_RID = "io.picolabs.manifold_portable_thing"
 
     enginePortableSubtreeUrl = function() {
       meta:host + "/krl/io.picolabs.portable_subtree.krl"
@@ -99,17 +100,8 @@ ruleset io.picolabs.manifold_pico {
     initializationRids = ["io.picolabs.notifications",
                           "io.picolabs.twilio.sms",
                           "io.picolabs.prowl",
-                          "io.picolabs.homeassistant",
-                          "io.picolabs.manifold_portable_thing"
+                          "io.picolabs.homeassistant"
                         ]
-
-    /** Run child RS init once io.picolabs.portable_subtree is on this pico (required by use module). */
-    readyForInitialization = function(installedRids, eventRids) {
-      portableReady = installedRids >< PORTABLE_SUBTREE_RID
-      manifoldInstalled = eventRids >< ctx:rid
-      portableJustInstalled = eventRids >< PORTABLE_SUBTREE_RID
-      portableReady && (manifoldInstalled || portableJustInstalled)
-    }
     
     appChannelName = "Manifold"
     appChannelType = "App"
@@ -588,16 +580,35 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
-  // initialization rulesets (after engine portable_subtree — manifold_portable_thing use module)
+  // initialization rulesets
 
-  rule install_portable_subtree_dependency {
-    select when wrangler ruleset_installed
-      where event:attr("rids") >< ctx:rid
+  rule initialization {
+    select when wrangler ruleset_installed where event:attr("rids").klog("rid") >< ctx:rid.klog("meta rid")
+    foreach initializationRids setting(rid)
+      pre {
+        absoluteURL = meta:rulesetURI;
+      }
+      if absoluteURL then noop();
+      fired {
+        raise wrangler event "install_ruleset_request"
+          attributes {
+            "rid": rid.klog("Installing "),
+            "absoluteURL": absoluteURL
+          }
+      }
+  }
+
+  // Opt-in portable thing move (engine portable_subtree + manifold_portable_thing; not part of bootstrap)
+  rule enable_portable_thing_install_engine_rs {
+    select when manifold enable_portable_thing
     pre {
       installed = wrangler:installedRIDs()
+      needPortable = not (installed >< PORTABLE_SUBTREE_RID)
+      needWrapper = not (installed >< MANIFOLD_PORTABLE_THING_RID)
     }
-    if not (installed >< PORTABLE_SUBTREE_RID) then noop()
+    if needPortable then noop()
     fired {
+      ent:enablePortableThing := needWrapper
       raise wrangler event "install_ruleset_request"
         attributes {
           "rid": PORTABLE_SUBTREE_RID,
@@ -606,23 +617,42 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
-  rule initialization {
+  rule enable_portable_thing_install_wrapper_rs {
+    select when manifold enable_portable_thing
+    pre {
+      installed = wrangler:installedRIDs()
+      havePortable = installed >< PORTABLE_SUBTREE_RID
+      needWrapper = not (installed >< MANIFOLD_PORTABLE_THING_RID)
+      absoluteURL = meta:rulesetURI
+    }
+    if havePortable && needWrapper && absoluteURL then noop()
+    fired {
+      raise wrangler event "install_ruleset_request"
+        attributes {
+          "rid": MANIFOLD_PORTABLE_THING_RID,
+          "absoluteURL": absoluteURL
+        }
+    }
+  }
+
+  rule enable_portable_thing_finish_after_portable {
     select when wrangler ruleset_installed
-    foreach initializationRids setting(rid)
-      pre {
-        eventRids = event:attr("rids")
-        installed = wrangler:installedRIDs()
-        shouldInit = readyForInitialization(installed, eventRids)
-        absoluteURL = meta:rulesetURI
-      }
-      if shouldInit && absoluteURL then noop()
-      fired {
-        raise wrangler event "install_ruleset_request"
-          attributes {
-            "rid": rid.klog("Installing "),
-            "absoluteURL": absoluteURL
-          }
-      }
+    pre {
+      eventRids = event:attr("rids")
+      installed = wrangler:installedRIDs()
+      pending = ent:enablePortableThing.defaultsTo(false)
+      absoluteURL = meta:rulesetURI
+      needWrapper = not (installed >< MANIFOLD_PORTABLE_THING_RID)
+    }
+    if pending && (eventRids >< PORTABLE_SUBTREE_RID) && needWrapper && absoluteURL then noop()
+    fired {
+      ent:enablePortableThing := false
+      raise wrangler event "install_ruleset_request"
+        attributes {
+          "rid": MANIFOLD_PORTABLE_THING_RID,
+          "absoluteURL": absoluteURL
+        }
+    }
   }
 
    rule set_tag_server {

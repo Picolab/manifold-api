@@ -6,9 +6,12 @@ ruleset io.picolabs.manifold_portable_thing {
       (export blob + import under Manifold with thing RS and ent:things registration).
 
       Layering (follow this pattern for other mesh apps):
-        portable_subtree — generic export/import (dido/wrangler); parent installs from engine /krl/
+        portable_subtree — generic export/import (dido/wrangler); opt-in from engine /krl/
         this ruleset — Manifold-specific registration only (subscription, thing RS)
-        (manifold_pico installs portable_subtree before this RS — required for use module)
+
+      Opt-in on Manifold (not installed at bootstrap):
+        raise manifold event "enable_portable_thing"
+        → installs io.picolabs.portable_subtree then this ruleset (use module order)
 
       Export (query on a pico that has portable_subtree, typically the thing or an ancestor):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
