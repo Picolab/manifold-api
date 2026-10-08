@@ -4,6 +4,7 @@
   "type": "module",
   "description": "KRL rulesets for Manifold on Pico Engine 1.0",
   "scripts": {
+    "hooks:install": "git config core.hooksPath .githooks",
     "test": "tsx t/run.ts",
     "test:parse": "tsx t/parse.ts",
     "test:keep": "tsx t/run.ts --keep",

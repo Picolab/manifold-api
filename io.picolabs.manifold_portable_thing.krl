@@ -40,14 +40,18 @@ ruleset io.picolabs.manifold_portable_thing {
     THING_RID = "io.picolabs.thing"
     thing_role = "manifold_thing"
 
-    /** Strip accidental JSON quoting from Testing-tab paste (e.g. `"Gravel Bike #7"`). */
-    trimImportAttr = function(value) {
-      value.isnull() => null |
-      s = value.typeof() == "String" => value | value + ""
-      s = s.trim()
-      s.length() >= 2 && s.substring(0, 1) == "\"" && s.substring(s.length() - 1) == "\""
-        => s.substring(1, s.length() - 1).trim()
+    stripOuterQuotes = function(s) {
+      len = s.length()
+      len >= 2 && s.substr(0, 1) == "\"" && s.substr(len - 1, 1) == "\""
+        => s.substr(1, len - 2).trim()
         | s
+    }
+
+    trimImportAttr = function(value) {
+      value.isnull() => null
+        | stripOuterQuotes(
+            (value.typeof() == "String" => value | value + "").trim()
+          )
     }
 
     thingRulesetUrl = function() {

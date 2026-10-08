@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Verify all mounted *.krl before commit (see t/parse.ts).
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+if ! git diff --cached --name-only --diff-filter=ACM | grep -qE '\.krl$'; then
+  exit 0
+fi
+
+npm run test:parse

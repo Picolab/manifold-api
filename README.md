@@ -143,6 +143,7 @@ npm install
 |---------|----------------|
 | `npm test` | Parse gate → Docker → bootstrap + scenarios → teardown |
 | `npm run test:parse` | KRL syntax check only (no Docker) |
+| `npm run hooks:install` | Use `.githooks/pre-commit` (runs `test:parse` when `*.krl` is staged) |
 | `npm run test:keep` | Full run; leave container up for inspection |
 | `npm run test:cleanup` | Remove leftover test containers and `/tmp` pico homes |
 
