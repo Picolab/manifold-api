@@ -15,12 +15,24 @@ ruleset io.picolabs.community {
       wrangler:picoQuery(ref, "io.picolabs.pds", "profile", "name"){"profile"}
     }
 
-    thingMemberName = function(sub) {
-      ref = thingMemberRef(sub)
-      cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-      cached{"name"}
-        || pds_name(ref)
+    liveThingMemberName = function(sub) {
+      sub{"layer2"} == true => layer2ThingMemberName(sub) | l1ThingMemberName(sub)
+    }
+
+    l1ThingMemberName = function(sub) {
+      ref = sub{"Tx"}
+      pds_name(ref)
         || wrangler:picoQuery(ref, "io.picolabs.wrangler", "myself"){"name"}
+    }
+
+    layer2ThingMemberName = function(sub) {
+      subscription:queryOnSub(sub{"Id"}, "io.picolabs.pds", "profile", {}){"profile"}{"name"}
+        || subscription:queryOnSub(sub{"Id"}, "io.picolabs.wrangler", "myself", {}){"name"}
+    }
+
+    thingMemberName = function(sub) {
+      cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
+      cached{"name"} || liveThingMemberName(sub)
     }
 
     things = function() {
@@ -35,7 +47,7 @@ ruleset io.picolabs.community {
     queryThing = function(id, rid, func, params) {
       sub = subscription:established("picoID", id)[0]
       sub.isnull() => null |
-      wrangler:picoQuery(thingMemberRef(sub), rid, func, params.decode())
+      subscription:queryOnSub(sub{"Id"}, rid, func, params.decode())
     }
 
     sequences = function() {
