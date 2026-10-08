@@ -104,11 +104,28 @@ ruleset io.picolabs.manifold_portable_thing {
         .head()
     }
 
+    donorQueryEciFromChannels = function(family) {
+      wrangler:picoQuery(family, "io.picolabs.wrangler", "channels", {})
+        .filter(function(ch) {
+          tags = ch{"tags"}.typeof() == "Array" => ch{"tags"}.join(",") | "";
+          tags != "system,self" && tags != "system,child" && tags != "system,parent"
+        })
+        .head(){"id"}
+    }
+
+    donorQueryEciFromRow = function(row) {
+      q = row{"queryEci"}
+      q.isnull() == false && q != "" => q |
+      row{"Tx"}.isnull() == false && row{"Tx"} != "" => row{"Tx"} |
+      row{"picoId"}.isnull() => null |
+      donorQueryEciFromChannels(row{"picoId"})
+    }
+
     thingExportHintsFromRegistry = function(row) {
       return {
         "thingFamilyPicoID": row{"picoId"},
         "name": row{"name"},
-        "donorQueryEci": row{"Tx"}
+        "donorQueryEci": donorQueryEciFromRow(row)
       }
     }
 

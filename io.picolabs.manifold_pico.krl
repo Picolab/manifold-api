@@ -24,8 +24,12 @@ ruleset io.picolabs.manifold_pico {
     getThings = function() {
       ent:things.defaultsTo({}).map(function(value, key) {
         sub = subscription:established("Id", value{"subID"})[0];
-        sub.put(value)
-           .put("picoId",key)
+        queryEci = value{"queryEci"}
+          .defaultsTo(sub.isnull() == false && sub{"Tx"} => sub{"Tx"} | null);
+        row = sub.isnull() == false => sub.put(value) | value;
+        row.put("picoId", key)
+           .put("queryEci", queryEci)
+           .put("Tx", queryEci)
       })
     }
 
@@ -181,10 +185,12 @@ ruleset io.picolabs.manifold_pico {
       subID = event:attr("Id");
       name = event:attr("name");
       picoID = event:attr("picoID");
+      thingQueryEci = event:attr("Tx");
       obj_structure = {
         "name": name,
         "subID": subID,
         "picoID": picoID,
+        "queryEci": thingQueryEci,
         "color": "#eceff1"//default color
       }
     }
