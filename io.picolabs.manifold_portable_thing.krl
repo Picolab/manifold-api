@@ -50,9 +50,58 @@ ruleset io.picolabs.manifold_portable_thing {
       things.typeof() == "Array" => things | things.values()
     }
 
-    thingInternalPicoId = function(familyPicoID) {
+    thingInternalPicoIdQuery = function(familyPicoID) {
       id = wrangler:picoQuery(familyPicoID, "io.picolabs.wrangler", "id", {})
       id.typeof() == "String" => id | null
+    }
+
+    thingInternalPicoId = function(familyPicoID) {
+      familyPicoID.isnull() || familyPicoID == "" => null
+        | thingInternalPicoIdQuery(familyPicoID)
+    }
+
+    registryRowForFamily = function(family) {
+      registeredThings()
+        .filter(function(r) { r{"picoId"} == family })
+        .head()
+    }
+
+    registryRowMatchingRef = function(ref) {
+      things = registeredThings()
+      row = things.filter(function(r) { r{"picoId"} == ref }).head()
+      row.isnull() == false => row |
+      things
+        .filter(function(r) {
+          not r{"picoId"}.isnull()
+            && thingInternalPicoId(r{"picoId"}) == ref
+        })
+        .head()
+    }
+
+    registeredThingHasChannel = function(family, channelEci) {
+      channels = wrangler:picoQuery(
+        family,
+        "io.picolabs.wrangler",
+        "channels",
+        {}
+      )
+      channels.filter(function(ch) { ch{"id"} == channelEci }).length() > 0
+    }
+
+    familyIfRegisteredThingHasChannel = function(family, channelEci) {
+      family.isnull() => null |
+      registeredThingHasChannel(family, channelEci) => family | null
+    }
+
+    /** Match UI / query channel ECIs without picoQuery(ref) — ref may be internal id, not a channel. */
+    familyForChannelEci = function(channelEci) {
+      channelEci.isnull() || channelEci == "" => null |
+      registeredThings()
+        .map(function(r) {
+          familyIfRegisteredThingHasChannel(r{"picoId"}, channelEci)
+        })
+        .filter(function(f) { not f.isnull() })
+        .head()
     }
 
     thingExportHintsFromRegistry = function(row) {
@@ -63,12 +112,11 @@ ruleset io.picolabs.manifold_portable_thing {
       }
     }
 
-    thingExportHintsFromChild = function(ref, lookupRef) {
+    thingExportHintsFromChild = function(ref) {
       wrangler:children()
         .filter(function(c) {
           c{"eci"} == ref
-            || c{"eci"} == lookupRef
-            || thingInternalPicoId(c{"eci"}) == lookupRef
+            || thingInternalPicoId(c{"eci"}) == ref
         })
         .map(function(c) {
           return {
@@ -81,22 +129,32 @@ ruleset io.picolabs.manifold_portable_thing {
         .defaultsTo({})
     }
 
+    exportHintsFromFamily = function(family) {
+      row = registryRowForFamily(family)
+      row.isnull() => null | thingExportHintsFromRegistry(row)
+    }
+
+    exportHintsFromRegistryRef = function(ref) {
+      row = registryRowMatchingRef(ref)
+      row.isnull() => null | thingExportHintsFromRegistry(row)
+    }
+
+    exportHintsFromChannelRef = function(ref) {
+      family = familyForChannelEci(ref)
+      family.isnull() => null | exportHintsFromFamily(family)
+    }
+
     /**
      * Manifold import hints for a thing export ref (any channel ECI, family ECI, or internal id).
      * name — human label from getThings() / ent:things, not wrangler id.
      */
     thingExportHints = function(ref) {
-      internal = wrangler:picoQuery(ref, "io.picolabs.wrangler", "id", {})
-      lookupRef = internal.typeof() == "String" => internal | ref
-      row = registeredThings()
-        .filter(function(r) {
-          r{"picoId"} == ref
-            || r{"picoId"} == lookupRef
-            || thingInternalPicoId(r{"picoId"}) == lookupRef
-        })
-        .head()
-      row.isnull() == false => thingExportHintsFromRegistry(row)
-        | thingExportHintsFromChild(ref, lookupRef)
+      ref.isnull() || ref == "" => {} |
+      exportHintsFromRegistryRef(ref).isnull() == false
+        => exportHintsFromRegistryRef(ref) |
+      exportHintsFromChannelRef(ref).isnull() == false
+        => exportHintsFromChannelRef(ref) |
+      thingExportHintsFromChild(ref)
     }
 
     exportPortableThing = function(subtreeRootPicoId, secret) {
