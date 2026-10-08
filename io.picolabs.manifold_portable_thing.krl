@@ -201,7 +201,8 @@ ruleset io.picolabs.manifold_portable_thing {
         attributes {
           "blob": event:attr("blob"),
           "secret": event:attr("secret"),
-          "renewIngress": event:attr("renewIngress").defaultsTo(true)
+          "renewIngress": event:attr("renewIngress").defaultsTo(true),
+          "bootstrapDisplayName": event:attr("name")
         }
     }
   }
