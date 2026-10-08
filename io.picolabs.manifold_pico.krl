@@ -90,12 +90,26 @@ ruleset io.picolabs.manifold_pico {
       tag_pico
     }
 
+    PORTABLE_SUBTREE_RID = "io.picolabs.portable_subtree"
+
+    enginePortableSubtreeUrl = function() {
+      meta:host + "/krl/io.picolabs.portable_subtree.krl"
+    }
+
     initializationRids = ["io.picolabs.notifications",
                           "io.picolabs.twilio.sms",
                           "io.picolabs.prowl",
                           "io.picolabs.homeassistant",
                           "io.picolabs.manifold_portable_thing"
                         ]
+
+    /** Run child RS init once io.picolabs.portable_subtree is on this pico (required by use module). */
+    readyForInitialization = function(installedRids, eventRids) {
+      portableReady = installedRids >< PORTABLE_SUBTREE_RID
+      manifoldInstalled = eventRids >< ctx:rid
+      portableJustInstalled = eventRids >< PORTABLE_SUBTREE_RID
+      portableReady && (manifoldInstalled || portableJustInstalled)
+    }
     
     appChannelName = "Manifold"
     appChannelType = "App"
@@ -574,15 +588,34 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
-  // initialization rulesets
+  // initialization rulesets (after engine portable_subtree — manifold_portable_thing use module)
+
+  rule install_portable_subtree_dependency {
+    select when wrangler ruleset_installed
+      where event:attr("rids") >< ctx:rid
+    pre {
+      installed = wrangler:installedRIDs()
+    }
+    if not (installed >< PORTABLE_SUBTREE_RID) then noop()
+    fired {
+      raise wrangler event "install_ruleset_request"
+        attributes {
+          "rid": PORTABLE_SUBTREE_RID,
+          "absoluteURL": enginePortableSubtreeUrl()
+        }
+    }
+  }
 
   rule initialization {
-    select when wrangler ruleset_installed where event:attr("rids").klog("rid") >< ctx:rid.klog("meta rid")
+    select when wrangler ruleset_installed
     foreach initializationRids setting(rid)
       pre {
-        absoluteURL = meta:rulesetURI;
+        eventRids = event:attr("rids")
+        installed = wrangler:installedRIDs()
+        shouldInit = readyForInitialization(installed, eventRids)
+        absoluteURL = meta:rulesetURI
       }
-      if absoluteURL then noop();
+      if shouldInit && absoluteURL then noop()
       fired {
         raise wrangler event "install_ruleset_request"
           attributes {

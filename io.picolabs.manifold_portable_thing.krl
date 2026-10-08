@@ -6,8 +6,9 @@ ruleset io.picolabs.manifold_portable_thing {
       (export blob + import under Manifold with thing RS and ent:things registration).
 
       Layering (follow this pattern for other mesh apps):
-        portable_subtree — generic export/import (dido/wrangler); install from engine /krl/
+        portable_subtree — generic export/import (dido/wrangler); parent installs from engine /krl/
         this ruleset — Manifold-specific registration only (subscription, thing RS)
+        (manifold_pico installs portable_subtree before this RS — required for use module)
 
       Export (query on a pico that has portable_subtree, typically the thing or an ancestor):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
@@ -32,13 +33,8 @@ ruleset io.picolabs.manifold_portable_thing {
   }
 
   global {
-    PORTABLE_SUBTREE_RID = "io.picolabs.portable_subtree"
     THING_RID = "io.picolabs.thing"
     thing_role = "manifold_thing"
-
-    enginePortableSubtreeUrl = function() {
-      meta:host + "/krl/io.picolabs.portable_subtree.krl"
-    }
 
     thingRulesetUrl = function() {
       parts = meta:rid_url.split("/")
@@ -76,23 +72,6 @@ ruleset io.picolabs.manifold_portable_thing {
           "attrs": ["blob", "secret", "name", "donorQueryEci", "renewIngress"]
         }
       ]
-    }
-  }
-
-  rule install_portable_subtree {
-    select when wrangler ruleset_installed
-      where event:attr("rids") >< meta:rid
-    pre {
-      installed = wrangler:installedRIDs()
-      url = enginePortableSubtreeUrl()
-    }
-    if not (installed >< PORTABLE_SUBTREE_RID) then noop()
-    fired {
-      raise wrangler event "install_ruleset_request"
-        attributes {
-          "rid": PORTABLE_SUBTREE_RID,
-          "absoluteURL": url
-        }
     }
   }
 
