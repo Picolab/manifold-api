@@ -13,13 +13,8 @@ ruleset io.picolabs.manifold_portable_thing {
         raise manifold event "enable_portable_thing"
         → installs io.picolabs.portable_subtree then this ruleset (use module order)
 
-      Export (query on a pico that has portable_subtree, typically the thing or an ancestor):
+      Export (query — same pattern as portable_subtree:exportSubtree):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
-
-      Export (event on Manifold app channel):
-        raise manifold event "export_portable_thing"
-          attributes { "subtreeRootPicoId", "secret" }
-        → export_portable_thing_done { "blob" }
 
       Import (event on Manifold app channel):
         raise manifold event "import_portable_thing"
@@ -32,7 +27,7 @@ ruleset io.picolabs.manifold_portable_thing {
     use module io.picolabs.subscription alias subscription
     use module io.picolabs.portable_subtree alias portable_subtree
 
-    shares exportPortableThing, lastExport, lastImport
+    shares exportPortableThing, lastImport
   }
 
   global {
@@ -49,51 +44,22 @@ ruleset io.picolabs.manifold_portable_thing {
       portable_subtree:exportSubtree(subtreeRootPicoId, secret)
     }
 
-    lastExport = function() {
-      ent:lastExport
-    }
-
     lastImport = function() {
       ent:lastImport
     }
 
     __testing = {
       "queries": [
-        {"name": "exportPortableThing", "attrs": ["subtreeRootPicoId", "secret"]},
-        {"name": "lastExport"},
+        {"name": "exportPortableThing", "args": ["subtreeRootPicoId", "secret"]},
         {"name": "lastImport"}
       ],
       "events": [
-        {
-          "domain": "manifold",
-          "name": "export_portable_thing",
-          "attrs": ["subtreeRootPicoId", "secret"]
-        },
         {
           "domain": "manifold",
           "name": "import_portable_thing",
           "attrs": ["blob", "secret", "name", "donorQueryEci", "renewIngress"]
         }
       ]
-    }
-  }
-
-  rule export_portable_thing {
-    select when manifold export_portable_thing
-      subtreeRootPicoId re#.+#
-      secret re#.+#
-    pre {
-      subtreeRootPicoId = event:attr("subtreeRootPicoId")
-      secret = event:attr("secret")
-      blob = exportPortableThing(subtreeRootPicoId, secret)
-      exportRecord = {
-        "subtreeRootPicoId": subtreeRootPicoId,
-        "blob": blob
-      }
-    }
-    fired {
-      ent:lastExport := exportRecord
-      raise manifold event "export_portable_thing_done" attributes exportRecord
     }
   }
 
