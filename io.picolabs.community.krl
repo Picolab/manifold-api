@@ -7,8 +7,20 @@ ruleset io.picolabs.community {
   }
   global {
 
-    pds_name = function(eci) {
-      wrangler:picoQuery(eci, "io.picolabs.pds", "profile", "name"){"profile"}
+    thingMemberRef = function(sub) {
+      sub{"layer2"} == true && sub{"Tx_did"} => sub{"Tx_did"} | sub{"Tx"}
+    }
+
+    pds_name = function(ref) {
+      wrangler:picoQuery(ref, "io.picolabs.pds", "profile", "name"){"profile"}
+    }
+
+    thingMemberName = function(sub) {
+      ref = thingMemberRef(sub)
+      cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
+      cached{"name"}
+        || pds_name(ref)
+        || wrangler:picoQuery(ref, "io.picolabs.wrangler", "myself"){"name"}
     }
 
     things = function() {
@@ -16,15 +28,14 @@ ruleset io.picolabs.community {
         sub{"Tx_role"} == "thing"
       }).map(function(sub) {
         cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-        name = cached{"name"} || pds_name(sub{"Tx"})
-                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
-        sub.put(cached).put({"name": name})
+        sub.put(cached).put({"name": thingMemberName(sub)})
       })
     }
 
     queryThing = function(id, rid, func, params) {
-      eci = subscription:established("picoID", id)[0]{"Tx"};
-      (eci) => wrangler:picoQuery(eci, rid, func, params.decode()) | null
+      sub = subscription:established("picoID", id)[0]
+      sub.isnull() => null |
+      wrangler:picoQuery(thingMemberRef(sub), rid, func, params.decode())
     }
 
     sequences = function() {
