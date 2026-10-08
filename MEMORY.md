@@ -453,7 +453,7 @@ Implemented all 8 steps below. Specifics & caveats:
   returns -- see picoQuery note below.)
 - picoQuery migration (2026-06-04): replaced ALL `wrangler:skyQuery(...)` with
   `wrangler:picoQuery(...)` (same params/order, drop-in) across notifications, thing, community,
-  manifold_import, email_notifications, and sensor-network sensor.community. skyQuery is
+  manifold_portable_thing, email_notifications, and sensor-network sensor.community. skyQuery is
   deprecated AND only did HTTP; pico-engine v1.X blocks HTTP on FAMILY channels (parent<->child).
   picoQuery uses `ctx:query()` locally on the same host, so it works over family channels. This
   RESOLVES the earlier worry about the Manifold pico's `parent_eci()` (a family channel to the

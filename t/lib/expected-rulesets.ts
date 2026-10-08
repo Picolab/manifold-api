@@ -24,7 +24,7 @@ export const OWNER_RULESETS = [
 export const MANIFOLD_RULESETS = [
   PDS_RID,
   "io.picolabs.manifold_pico",
-  "io.picolabs.manifold_import",
+  "io.picolabs.manifold_portable_thing",
   "io.picolabs.notifications",
   "io.picolabs.twilio.sms",
   "io.picolabs.prowl",

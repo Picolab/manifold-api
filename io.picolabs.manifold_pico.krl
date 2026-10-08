@@ -94,7 +94,7 @@ ruleset io.picolabs.manifold_pico {
                           "io.picolabs.twilio.sms",
                           "io.picolabs.prowl",
                           "io.picolabs.homeassistant",
-                          "io.picolabs.manifold_import"
+                          "io.picolabs.manifold_portable_thing"
                         ]
     
     appChannelName = "Manifold"
