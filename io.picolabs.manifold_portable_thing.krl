@@ -40,6 +40,16 @@ ruleset io.picolabs.manifold_portable_thing {
     THING_RID = "io.picolabs.thing"
     thing_role = "manifold_thing"
 
+    /** Strip accidental JSON quoting from Testing-tab paste (e.g. `"Gravel Bike #7"`). */
+    trimImportAttr = function(value) {
+      value.isnull() => null |
+      s = value.typeof() == "String" => value | value + ""
+      s = s.trim()
+      s.length() >= 2 && s.substring(0, 1) == "\"" && s.substring(s.length() - 1) == "\""
+        => s.substring(1, s.length() - 1).trim()
+        | s
+    }
+
     thingRulesetUrl = function() {
       parts = meta:rid_url.split("/")
       parts.splice(parts.length() - 1, 1, THING_RID + ".krl").join("/")
@@ -211,15 +221,15 @@ ruleset io.picolabs.manifold_portable_thing {
       secret re#.+#
     fired {
       ent:pendingImport := {
-        "name": event:attr("name"),
-        "donorQueryEci": event:attr("donorQueryEci")
+        "name": trimImportAttr(event:attr("name")),
+        "donorQueryEci": trimImportAttr(event:attr("donorQueryEci"))
       }
       raise portable_subtree event "import"
         attributes {
           "blob": event:attr("blob"),
           "secret": event:attr("secret"),
           "renewIngress": event:attr("renewIngress").defaultsTo(true),
-          "bootstrapDisplayName": event:attr("name")
+          "bootstrapDisplayName": trimImportAttr(event:attr("name"))
         }
     }
   }
@@ -266,6 +276,11 @@ ruleset io.picolabs.manifold_portable_thing {
         }
       })
     } fired {
+      raise manifold event "register_thing_index" attributes {
+        "picoID": familyEci,
+        "name": thing_name,
+        "queryEci": thing_query_eci
+      }
       ent:pendingImport := null
       ent:lastImport := enrichedResult
       raise manifold event "import_portable_thing_done" attributes enrichedResult

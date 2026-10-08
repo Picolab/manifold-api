@@ -179,6 +179,32 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  // Portable import (and other flows) may index a thing before subscription_added.
+  rule registerThingIndex {
+    select when manifold register_thing_index
+    pre {
+      picoID = event:attr("picoID")
+      name = event:attr("name")
+      queryEci = event:attr("queryEci")
+      prior = ent:things.defaultsTo({}){picoID}
+    }
+    if picoID && name then
+      send_directive("Register thing in Manifold index", {
+        "picoID": picoID,
+        "name": name
+      })
+    fired {
+      ent:things := ent:things.defaultsTo({});
+      ent:things{picoID} := {
+        "name": name,
+        "picoID": picoID,
+        "queryEci": queryEci,
+        "subID": prior{"subID"},
+        "color": prior{"color"}.defaultsTo("#eceff1")
+      }
+    }
+  }
+
   rule trackThingSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
     pre {
