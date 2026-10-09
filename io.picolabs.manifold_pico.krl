@@ -2,8 +2,10 @@ ruleset io.picolabs.manifold_pico {
   meta {
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
-    shares getManifoldInfo, isAChild, getThings, getCommunities, getTagServer
-    provides getManifoldInfo, getThings, getCommunities
+    shares getManifoldInfo, isAChild, getThings, getCommunities, getTagServer,
+      thingRegistryKey, communityRegistryKey
+    provides getManifoldInfo, getThings, getCommunities, thingRegistryKey,
+      communityRegistryKey
   }//end meta
 
   global {
@@ -13,6 +15,8 @@ ruleset io.picolabs.manifold_pico {
     thing_role = "manifold_thing"
     community_role = "manifold_community"
     max_picos = 100
+    appChannelName = "Manifold"
+    appChannelType = "App"
 
     getManifoldInfo = function() {
       {
@@ -53,7 +57,7 @@ ruleset io.picolabs.manifold_pico {
           "domain": "wrangler", 
           "type": "subscription",
           "attrs": {
-                   "name"        : event:attr("name"),
+                   "name"        : appChannelName,
                    "picoID"      : event:attr("id"),
                    "Rx_role"     : role_type,
                    "Tx_role"     : "manifold_pico",
@@ -101,6 +105,25 @@ ruleset io.picolabs.manifold_pico {
       ent:communities.defaultsTo({}).keys() >< picoID
     }
 
+    /** ent:things key (family channel ECI) for remove_thing / getThings. */
+    thingRegistryKey = function(ref) {
+      ref.isnull() || ref == "" => null |
+      ent:things.defaultsTo({}).keys() >< ref => ref |
+      ent:things.defaultsTo({}).keys().filter(function(k) {
+        row = ent:things{k}
+        row{"queryEci"} == ref || row{"picoID"} == ref
+      }).head()
+    }
+
+    communityRegistryKey = function(ref) {
+      ref.isnull() || ref == "" => null |
+      ent:communities.defaultsTo({}).keys() >< ref => ref |
+      ent:communities.defaultsTo({}).keys().filter(function(k) {
+        row = ent:communities{k}
+        row{"picoID"} == ref
+      }).head()
+    }
+
     getTagServer = function() {
       parent = wrangler:parent_eci().klog("parent") // ask mom
       tag_pico = wrangler:picoQuery(parent, "io.picolabs.manifold_owner", "getTagServer")
@@ -119,9 +142,6 @@ ruleset io.picolabs.manifold_pico {
                           "io.picolabs.prowl",
                           "io.picolabs.homeassistant"
                         ]
-    
-    appChannelName = "Manifold"
-    appChannelType = "App"
 
   } //end global
 
@@ -172,7 +192,7 @@ ruleset io.picolabs.manifold_pico {
           "domain": "wrangler", 
           "type": "subscription",
           "attrs": {
-                   "name"        : event:attr("name"),
+                   "name"        : appChannelName,
                    "picoID"      : picoID,
                    "Rx_role"     : role_type,
                    "Tx_role"     : "manifold_pico",
@@ -223,9 +243,10 @@ ruleset io.picolabs.manifold_pico {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
     pre {
       subID = event:attr("Id");
-      name = event:attr("name");
       picoID = event:attr("picoID");
       thingQueryEci = event:attr("Tx");
+      name = wrangler:picoQuery(thingQueryEci, "io.picolabs.wrangler", "name", {})
+        .defaultsTo(event:attr("name"));
       obj_structure = {
         "name": name,
         "subID": subID,
@@ -270,12 +291,14 @@ ruleset io.picolabs.manifold_pico {
   rule fireThingCreatedCallback {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
     pre {
-      picoID = event:attr("picoID");
+      bus = event:attr("bus").defaultsTo({})
+      // Manifold thing bootstrap uses family channel ECI as picoID on the subscription bus.
+      picoID = event:attr("picoID") || bus{"picoID"}
       // The thing's subscription channel (this subscription's Tx) is usable by
       // other picos. We must NOT hand back picoID, which is the parent/child
       // (family) bootstrap channel that only the Manifold pico may use.
-      thing_eci = event:attr("Tx");
-      cb = ent:pending_callbacks.defaultsTo({}){picoID};
+      thing_eci = event:attr("Tx") || bus{"Tx"}
+      cb = ent:pending_callbacks.defaultsTo({}){picoID}
     }
     if cb then every {
       event:send({
@@ -375,7 +398,7 @@ ruleset io.picolabs.manifold_pico {
         "domain": "wrangler",
         "type": "subscription",
         "attrs": {
-          "name"        : event:attr("name"),
+          "name"        : appChannelName,
           "picoID"      : picoID,
           "Rx_role"     : community_role,
           "Tx_role"     : "manifold_pico",
@@ -409,9 +432,10 @@ ruleset io.picolabs.manifold_pico {
   rule fireCommunityCreatedCallback {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
     pre {
-      picoID = event:attr("picoID");
-      community_eci = event:attr("Tx");
-      cb = ent:pending_community_callbacks.defaultsTo({}){picoID};
+      bus = event:attr("bus").defaultsTo({})
+      picoID = event:attr("picoID") || bus{"picoID"}
+      community_eci = event:attr("Tx") || bus{"Tx"}
+      cb = ent:pending_community_callbacks.defaultsTo({}){picoID}
     }
     if cb then
       event:send({
@@ -473,8 +497,10 @@ ruleset io.picolabs.manifold_pico {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
     pre {
       subID = event:attr("Id");
-      name = event:attr("name");
       picoID = event:attr("picoID");
+      communityQueryEci = event:attr("Tx");
+      name = wrangler:picoQuery(communityQueryEci, "io.picolabs.wrangler", "name", {})
+        .defaultsTo(event:attr("name"));
       obj_structure = {
         "name": name,
         "subID": subID,
@@ -493,7 +519,8 @@ ruleset io.picolabs.manifold_pico {
   rule removeThingSubscription {
     select when manifold remove_thing
     pre {
-      picoID = event:attr("picoID");
+      rawPicoID = event:attr("picoID");
+      picoID = thingRegistryKey(rawPicoID).defaultsTo(rawPicoID);
       sub = thingManifoldSub(picoID);
     }
 
@@ -511,7 +538,8 @@ ruleset io.picolabs.manifold_pico {
   rule removeThingOrphan {
     select when manifold remove_thing
     pre {
-      picoID = event:attr("picoID");
+      rawPicoID = event:attr("picoID");
+      picoID = thingRegistryKey(rawPicoID).defaultsTo(rawPicoID);
       indexed = picoID.isnull() == false
         && ent:things.defaultsTo({}).keys() >< picoID;
       child = picoID.isnull() == false && isAChild(picoID);
@@ -533,7 +561,8 @@ ruleset io.picolabs.manifold_pico {
   rule removeThingOrphanChild {
     select when manifold remove_thing
     pre {
-      picoID = event:attr("picoID");
+      rawPicoID = event:attr("picoID");
+      picoID = thingRegistryKey(rawPicoID).defaultsTo(rawPicoID);
       sub = thingManifoldSub(picoID);
       child = picoID.isnull() == false && isAChild(picoID);
     }
