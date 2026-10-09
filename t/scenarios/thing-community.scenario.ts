@@ -114,9 +114,10 @@ describe("thing / community", () => {
     assert.equal(thingSide.Tx_role, "community");
     assert.equal(communitySide.Tx_role, "thing");
     assert.equal(thingSide.Id, communitySide.Id);
-    assert.equal(thingSide.name, COMMUNITY_NAME);
+    const memberLinkName = `${COMMUNITY_NAME}:${THING_NAME}`;
+    assert.equal(thingSide.name, memberLinkName);
     assert.equal(thingSide.description, COMMUNITY_DESCRIPTION);
-    assert.equal(communitySide.name, THING_NAME);
+    assert.equal(communitySide.name, memberLinkName);
   });
 
   it("removes the thing from the community without deleting either pico", async () => {

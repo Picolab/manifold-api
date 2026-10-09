@@ -18,6 +18,12 @@ ruleset io.picolabs.manifold_pico {
     appChannelName = "Manifold"
     appChannelType = "App"
 
+    /** Relationships tab name on child picos: counterparty + local display name. */
+    manifoldLinkName = function(childName) {
+      childName.isnull() || childName == "" => appChannelName |
+      appChannelName + ":" + childName
+    }
+
     getManifoldInfo = function() {
       {
         "things": getThings(),
@@ -57,7 +63,7 @@ ruleset io.picolabs.manifold_pico {
           "domain": "wrangler", 
           "type": "subscription",
           "attrs": {
-                   "name"        : appChannelName,
+                   "name"        : manifoldLinkName(event:attr("name")),
                    "picoID"      : event:attr("id"),
                    "Rx_role"     : role_type,
                    "Tx_role"     : "manifold_pico",
@@ -192,7 +198,7 @@ ruleset io.picolabs.manifold_pico {
           "domain": "wrangler", 
           "type": "subscription",
           "attrs": {
-                   "name"        : appChannelName,
+                   "name"        : manifoldLinkName(event:attr("name")),
                    "picoID"      : picoID,
                    "Rx_role"     : role_type,
                    "Tx_role"     : "manifold_pico",
@@ -398,7 +404,7 @@ ruleset io.picolabs.manifold_pico {
         "domain": "wrangler",
         "type": "subscription",
         "attrs": {
-          "name"        : appChannelName,
+          "name"        : manifoldLinkName(event:attr("name")),
           "picoID"      : picoID,
           "Rx_role"     : community_role,
           "Tx_role"     : "manifold_pico",

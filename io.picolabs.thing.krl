@@ -60,11 +60,14 @@ ruleset io.picolabs.thing {
                     || wrangler:picoQuery(community_eci, "io.picolabs.wrangler", "myself"){"name"} | null
       description = isCommunity => pds_profile{"description"}
                     || wrangler:picoQuery(community_eci, "io.picolabs.community", "description") | null
+      link_name = event:attr("name")
+        .defaultsTo(event:attr("channel_name"))
+        .defaultsTo(name + ":" + wrangler:myself(){"name"})
     }
     if isCommunity then noop()
     fired {
       ent:communityInfo{event:attr("Id")} := {
-        "name"       : name,
+        "name"       : link_name,
         "description": description
       }
     }

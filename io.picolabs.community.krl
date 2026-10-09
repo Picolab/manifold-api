@@ -178,12 +178,15 @@ ruleset io.picolabs.community {
       thing_id = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself"){"id"} | null
       thing_name = thing && thing{"profile"} => thing{"profile"}{"name"}
                     | wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself"){"name"}
+      link_name = event:attr("name")
+        .defaultsTo(event:attr("channel_name"))
+        .defaultsTo(wrangler:myself(){"name"} + ":" + thing_name)
     }
     if isCommunity && thing_id then noop()
     fired {
       ent:thingInfo{event:attr("Id")} := {
         "id"  : thing_id,
-        "name": thing_name
+        "name": link_name
       }
     }
   }

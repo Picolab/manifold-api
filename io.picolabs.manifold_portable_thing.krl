@@ -269,7 +269,7 @@ ruleset io.picolabs.manifold_portable_thing {
         "domain": "wrangler",
         "type": "subscription",
         "attrs": {
-          "name": "Manifold",
+          "name": "Manifold:" + thing_name,
           "picoID": familyEci,
           "Rx_role": thing_role,
           "Tx_role": "manifold_pico",
