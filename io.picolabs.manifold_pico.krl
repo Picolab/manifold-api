@@ -68,13 +68,14 @@ ruleset io.picolabs.manifold_pico {
         name = registryNameFromLink(b{"name"}).defaultsTo(b{"name"})
         queryEci = stored{"queryEci"}.defaultsTo(b{"Tx"})
         row = stored.put(b)
-        acc.put(picoID, row.put("name", name)
+          .put("name", name)
           .put("subID", b{"Id"})
           .put("picoID", picoID)
           .put("picoId", picoID)
           .put("queryEci", queryEci)
           .put("Tx", queryEci)
-          .put("color", stored{"color"}.defaultsTo("#eceff1")))
+          .put("color", stored{"color"}.defaultsTo("#eceff1"))
+        acc.put(picoID, row)
       }, {})
     }
 
@@ -89,10 +90,11 @@ ruleset io.picolabs.manifold_pico {
         stored = entMap{picoID}.defaultsTo({})
         name = registryNameFromLink(b{"name"}).defaultsTo(b{"name"})
         row = stored.put(b)
-        acc.put(picoID, row.put("name", name)
+          .put("name", name)
           .put("subID", b{"Id"})
           .put("picoID", picoID)
-          .put("color", stored{"color"}.defaultsTo("#87cefa")))
+          .put("color", stored{"color"}.defaultsTo("#87cefa"))
+        acc.put(picoID, row)
       }, {})
     }
 
@@ -657,6 +659,14 @@ ruleset io.picolabs.manifold_pico {
         "type": "reconcile_community_registry",
         "attrs": {}
       })
+    }
+  }
+
+  rule seedRegistryAfterUpgrade {
+    select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
+    fired {
+      ent:things := getThings()
+      ent:communities := getCommunities()
     }
   }
 
