@@ -32,6 +32,15 @@ ruleset io.picolabs.manifold_pico {
       linkName
     }
 
+    /** App channel accepts manifold domain; subscription/wellKnown channels do not. */
+    manifoldAppEci = function() {
+      ent:app_channel_eci.defaultsTo(
+        wrangler:channels()
+          .filter(function(c) { c{"name"} == appChannelName })
+          .head(){"id"}
+      )
+    }
+
     getManifoldInfo = function() {
       {
         "things": getThings(),
@@ -255,17 +264,21 @@ ruleset io.picolabs.manifold_pico {
 
   rule deferTrackThingSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
-    event:send({
-      "eci": event:eci,
-      "domain": "manifold",
-      "type": "track_thing_subscription",
-      "attrs": {
-        "Id": event:attr("Id"),
-        "picoID": event:attr("picoID"),
-        "Tx": event:attr("Tx"),
-        "name": event:attr("name")
-      }
-    })
+    pre {
+      app_eci = manifoldAppEci()
+    }
+    if app_eci then
+      event:send({
+        "eci": app_eci,
+        "domain": "manifold",
+        "type": "track_thing_subscription",
+        "attrs": {
+          "Id": event:attr("Id"),
+          "picoID": event:attr("picoID"),
+          "Tx": event:attr("Tx"),
+          "name": event:attr("name")
+        }
+      })
   }
 
   rule trackThingSubscription {
@@ -317,12 +330,16 @@ ruleset io.picolabs.manifold_pico {
   // is established, but only when a callback was registered for this thing.
   rule deferFireThingCreatedCallback {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
-    event:send({
-      "eci": event:eci,
-      "domain": "manifold",
-      "type": "fire_thing_created_callback",
-      "attrs": event:attrs
-    })
+    pre {
+      app_eci = manifoldAppEci()
+    }
+    if app_eci then
+      event:send({
+        "eci": app_eci,
+        "domain": "manifold",
+        "type": "fire_thing_created_callback",
+        "attrs": event:attrs
+      })
   }
 
   rule fireThingCreatedCallback {
@@ -468,12 +485,16 @@ ruleset io.picolabs.manifold_pico {
 
   rule deferFireCommunityCreatedCallback {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
-    event:send({
-      "eci": event:eci,
-      "domain": "manifold",
-      "type": "fire_community_created_callback",
-      "attrs": event:attrs
-    })
+    pre {
+      app_eci = manifoldAppEci()
+    }
+    if app_eci then
+      event:send({
+        "eci": app_eci,
+        "domain": "manifold",
+        "type": "fire_community_created_callback",
+        "attrs": event:attrs
+      })
   }
 
   // Notify delegating pico once the community's manifold subscription exists.
@@ -543,16 +564,20 @@ ruleset io.picolabs.manifold_pico {
 
   rule deferTrackCommSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
-    event:send({
-      "eci": event:eci,
-      "domain": "manifold",
-      "type": "track_comm_subscription",
-      "attrs": {
-        "Id": event:attr("Id"),
-        "picoID": event:attr("picoID"),
-        "name": event:attr("name")
-      }
-    })
+    pre {
+      app_eci = manifoldAppEci()
+    }
+    if app_eci then
+      event:send({
+        "eci": app_eci,
+        "domain": "manifold",
+        "type": "track_comm_subscription",
+        "attrs": {
+          "Id": event:attr("Id"),
+          "picoID": event:attr("picoID"),
+          "name": event:attr("name")
+        }
+      })
   }
 
   rule trackCommSubscription {
