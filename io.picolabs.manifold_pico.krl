@@ -24,6 +24,14 @@ ruleset io.picolabs.manifold_pico {
       appChannelName + ":" + childName
     }
 
+    /** ent:things/communities display name from link bus name (no cross-pico query). */
+    registryNameFromLink = function(linkName) {
+      linkName.isnull() || linkName == "" => null |
+      linkName.substr(0, appChannelName.length() + 1) == appChannelName + ":" =>
+        linkName.substr(appChannelName.length() + 1) |
+      linkName
+    }
+
     getManifoldInfo = function() {
       {
         "things": getThings(),
@@ -251,7 +259,7 @@ ruleset io.picolabs.manifold_pico {
       subID = event:attr("Id");
       picoID = event:attr("picoID");
       thingQueryEci = event:attr("Tx");
-      name = wrangler:picoQuery(thingQueryEci, "io.picolabs.wrangler", "name", {})
+      name = registryNameFromLink(event:attr("name"))
         .defaultsTo(event:attr("name"));
       obj_structure = {
         "name": name,
@@ -504,8 +512,7 @@ ruleset io.picolabs.manifold_pico {
     pre {
       subID = event:attr("Id");
       picoID = event:attr("picoID");
-      communityQueryEci = event:attr("Tx");
-      name = wrangler:picoQuery(communityQueryEci, "io.picolabs.wrangler", "name", {})
+      name = registryNameFromLink(event:attr("name"))
         .defaultsTo(event:attr("name"));
       obj_structure = {
         "name": name,
