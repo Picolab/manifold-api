@@ -253,8 +253,23 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
-  rule trackThingSubscription {
+  rule deferTrackThingSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
+    event:send({
+      "eci": event:eci,
+      "domain": "manifold",
+      "type": "track_thing_subscription",
+      "attrs": {
+        "Id": event:attr("Id"),
+        "picoID": event:attr("picoID"),
+        "Tx": event:attr("Tx"),
+        "name": event:attr("name")
+      }
+    })
+  }
+
+  rule trackThingSubscription {
+    select when manifold track_thing_subscription
     pre {
       subID = event:attr("Id");
       picoID = event:attr("picoID");
@@ -269,8 +284,6 @@ ruleset io.picolabs.manifold_pico {
         "color": "#eceff1"//default color
       }
     }
-    if subID && name && picoID then
-      send_directive("Tracking subscription", { "info": obj_structure })
     fired {
       ent:things := ent:things.defaultsTo({});
       ent:things{picoID} := obj_structure;
@@ -302,17 +315,26 @@ ruleset io.picolabs.manifold_pico {
 
   // Fire the delegation callback once the thing's manifold_thing subscription
   // is established, but only when a callback was registered for this thing.
-  rule fireThingCreatedCallback {
+  rule deferFireThingCreatedCallback {
     select when wrangler subscription_added where event:attr("Tx_role") == thing_role
+    event:send({
+      "eci": event:eci,
+      "domain": "manifold",
+      "type": "fire_thing_created_callback",
+      "attrs": event:attrs
+    })
+  }
+
+  rule fireThingCreatedCallback {
+    select when manifold fire_thing_created_callback
     pre {
       bus = event:attr("bus").defaultsTo({})
-      // Manifold thing bootstrap uses family channel ECI as picoID on the subscription bus.
       picoID = event:attr("picoID") || bus{"picoID"}
-      // The thing's subscription channel (this subscription's Tx) is usable by
-      // other picos. We must NOT hand back picoID, which is the parent/child
-      // (family) bootstrap channel that only the Manifold pico may use.
       thing_eci = event:attr("Tx") || bus{"Tx"}
       cb = ent:pending_callbacks.defaultsTo({}){picoID}
+      thing_wrangler_id = thing_eci
+        => wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself", {}){"id"}
+        | null
     }
     if cb then every {
       event:send({
@@ -323,7 +345,8 @@ ruleset io.picolabs.manifold_pico {
         "attrs": {
           "rcn": cb{"rcn"},
           "thingPicoID": picoID,
-          "thing_eci": thing_eci
+          "thing_eci": thing_eci,
+          "thingWranglerId": thing_wrangler_id
         }
       });
       event:send({
@@ -334,7 +357,8 @@ ruleset io.picolabs.manifold_pico {
         "attrs": {
           "rcn": cb{"rcn"},
           "thingPicoID": picoID,
-          "thing_eci": thing_eci
+          "thing_eci": thing_eci,
+          "thingWranglerId": thing_wrangler_id
         }
       })
     }
@@ -442,9 +466,19 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  rule deferFireCommunityCreatedCallback {
+    select when wrangler subscription_added where event:attr("Tx_role") == community_role
+    event:send({
+      "eci": event:eci,
+      "domain": "manifold",
+      "type": "fire_community_created_callback",
+      "attrs": event:attrs
+    })
+  }
+
   // Notify delegating pico once the community's manifold subscription exists.
   rule fireCommunityCreatedCallback {
-    select when wrangler subscription_added where event:attr("Tx_role") == community_role
+    select when manifold fire_community_created_callback
     pre {
       bus = event:attr("bus").defaultsTo({})
       picoID = event:attr("picoID") || bus{"picoID"}
@@ -507,8 +541,22 @@ ruleset io.picolabs.manifold_pico {
       })
   }
 
-  rule trackCommSubscription {
+  rule deferTrackCommSubscription {
     select when wrangler subscription_added where event:attr("Tx_role") == community_role
+    event:send({
+      "eci": event:eci,
+      "domain": "manifold",
+      "type": "track_comm_subscription",
+      "attrs": {
+        "Id": event:attr("Id"),
+        "picoID": event:attr("picoID"),
+        "name": event:attr("name")
+      }
+    })
+  }
+
+  rule trackCommSubscription {
+    select when manifold track_comm_subscription
     pre {
       subID = event:attr("Id");
       picoID = event:attr("picoID");
@@ -521,8 +569,6 @@ ruleset io.picolabs.manifold_pico {
         "color": "#87cefa" //default community color
       };
     }
-    if subID && name && picoID then
-      send_directive("Tracking subscription", { "info": obj_structure })
     fired {
       ent:communities := ent:communities.defaultsTo({});
       ent:communities{picoID} := obj_structure;
