@@ -48,16 +48,34 @@ ruleset io.picolabs.manifold_pico {
       }
     }
 
-    getThings = function() {
-      ent:things.defaultsTo({}).map(function(value, key) {
-        sub = subscription:established("Id", value{"subID"})[0];
-        queryEci = value{"queryEci"}
-          .defaultsTo(sub.isnull() == false && sub{"Tx"} => sub{"Tx"} | null);
-        row = sub.isnull() == false => sub.put(value) | value;
-        row.put("picoId", key)
-           .put("queryEci", queryEci)
-           .put("Tx", queryEci)
+    thingSubscriptionRows = function() {
+      subscription:established().filter(function(b) {
+        b{"Tx_role"} == thing_role
       })
+    }
+
+    communitySubscriptionRows = function() {
+      subscription:established().filter(function(b) {
+        b{"Tx_role"} == community_role
+      })
+    }
+
+    getThings = function() {
+      entMap = ent:things.defaultsTo({})
+      thingSubscriptionRows().reduce(function(acc, b) {
+        picoID = b{"picoID"}
+        stored = entMap{picoID}.defaultsTo({})
+        name = registryNameFromLink(b{"name"}).defaultsTo(b{"name"})
+        queryEci = stored{"queryEci"}.defaultsTo(b{"Tx"})
+        row = stored.put(b)
+        acc.put(picoID, row.put("name", name)
+          .put("subID", b{"Id"})
+          .put("picoID", picoID)
+          .put("picoId", picoID)
+          .put("queryEci", queryEci)
+          .put("Tx", queryEci)
+          .put("color", stored{"color"}.defaultsTo("#eceff1")))
+      }, {})
     }
 
     hasTutorial = function() {
@@ -65,10 +83,17 @@ ruleset io.picolabs.manifold_pico {
     }
 
     getCommunities = function() {
-      ent:communities.defaultsTo({}).map(function(value, key) {
-        sub = subscription:established("Id", value{"subID"})[0];
-        sub.put(value)
-      })
+      entMap = ent:communities.defaultsTo({})
+      communitySubscriptionRows().reduce(function(acc, b) {
+        picoID = b{"picoID"}
+        stored = entMap{picoID}.defaultsTo({})
+        name = registryNameFromLink(b{"name"}).defaultsTo(b{"name"})
+        row = stored.put(b)
+        acc.put(picoID, row.put("name", name)
+          .put("subID", b{"Id"})
+          .put("picoID", picoID)
+          .put("color", stored{"color"}.defaultsTo("#87cefa")))
+      }, {})
     }
 
     // NOt using this in things anymore. Still used in communities, but that needs to be refactored to not use this
@@ -597,6 +622,41 @@ ruleset io.picolabs.manifold_pico {
     fired {
       ent:communities := ent:communities.defaultsTo({});
       ent:communities{picoID} := obj_structure;
+    }
+  }
+
+  rule reconcileThingRegistry {
+    select when manifold reconcile_thing_registry
+    fired {
+      ent:things := getThings()
+    }
+  }
+
+  rule reconcileCommunityRegistry {
+    select when manifold reconcile_community_registry
+    fired {
+      ent:communities := getCommunities()
+    }
+  }
+
+  rule scheduleRegistryReconcile {
+    select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
+    pre {
+      app_eci = manifoldAppEci()
+    }
+    if app_eci then every {
+      event:send({
+        "eci": app_eci,
+        "domain": "manifold",
+        "type": "reconcile_thing_registry",
+        "attrs": {}
+      });
+      event:send({
+        "eci": app_eci,
+        "domain": "manifold",
+        "type": "reconcile_community_registry",
+        "attrs": {}
+      })
     }
   }
 
