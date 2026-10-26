@@ -8,7 +8,6 @@ thing.
 *Version draft. Generated from the ruleset's annotations by `krl-schema --format markdown`; edit the `/** */` comments in the source, not this page. Only annotated rules and shared functions appear.*
 
 **Operations:** [thing:community_notify](#thingcommunity_notify) · [manifold:installapp](#manifoldinstallapp) · [manifold:uninstallapp](#manifolduninstallapp)  
-**Queries:** [communities](#communities--array)
 
 ## Operations
 
@@ -100,11 +99,3 @@ select when manifold uninstallapp
 ```
 
 </details>
-
-## Queries
-
-### `communities()` → Array
-
-The communities this thing belongs to: its established relationships with Tx_role community, each with the community's name and description.
-
-**Call:** `GET /sky/query/<eci>/io.picolabs.thing/communities`, or `<alias>:communities()` from KRL with `use module io.picolabs.thing alias <alias>`
