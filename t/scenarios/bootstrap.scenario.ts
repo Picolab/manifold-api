@@ -8,13 +8,11 @@ import {
 import {
   MANIFOLD_RULESETS,
   OWNER_RULESETS,
-  SKILLS_REGISTRY_RULESETS,
   TAG_REGISTRY_RULESETS,
 } from "../lib/expected-rulesets.js";
 import { getTestBootstrap, getTestState } from "../lib/test-context.js";
 
 const TAG_REGISTRY_NAME = "Tag Registry";
-const SKILLS_REGISTRY_NAME = "Skills Registry";
 const OWNER_NAME = "Owner";
 const MANIFOLD_NAME = "Manifold";
 
@@ -39,24 +37,6 @@ describe("bootstrap", () => {
       "Tag Registry pico"
     );
     assertIncludes(rids, [...TAG_REGISTRY_RULESETS], "Tag Registry pico");
-  });
-
-  it("creates skills registry pico with skills_registry ruleset", async () => {
-    const state = getTestState();
-    const ctx = getTestBootstrap();
-
-    assertTruthy(ctx.status.skills_registry_eci, "bootstrap: skills_registry_eci not set");
-
-    const uiEci = await findChildUiByName(state, ctx.rootUiEci, SKILLS_REGISTRY_NAME);
-    assertTruthy(uiEci, `root has no child pico named "${SKILLS_REGISTRY_NAME}"`);
-
-    const rids = await waitForInstalledRids(
-      state,
-      uiEci,
-      SKILLS_REGISTRY_RULESETS,
-      "Skills Registry pico"
-    );
-    assertIncludes(rids, [...SKILLS_REGISTRY_RULESETS], "Skills Registry pico");
   });
 
   it("creates owner pico with profile and manifold_owner rulesets", async () => {

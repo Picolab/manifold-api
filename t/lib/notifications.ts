@@ -34,16 +34,27 @@ export async function enableNotificationChannel(
   });
 }
 
+function asNotificationList(raw: unknown): ManifoldNotification[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (raw && typeof raw === "object") {
+    return Object.values(raw) as ManifoldNotification[];
+  }
+  return [];
+}
+
 export async function getNotifications(
   state: RuntimeState,
   manifoldAppEci: string
 ): Promise<ManifoldNotification[]> {
-  return query<ManifoldNotification[]>(
+  const raw = await query<unknown>(
     state,
     manifoldAppEci,
     "io.picolabs.notifications",
     "getNotifications"
   );
+  return asNotificationList(raw);
 }
 
 export async function waitForNotification(

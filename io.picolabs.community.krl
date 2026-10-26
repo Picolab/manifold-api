@@ -1,5 +1,11 @@
 ruleset io.picolabs.community {
   meta {
+    name "Manifold community"
+    description <<
+      Base ruleset for a Manifold community pico: a group of things. Accepts things
+      as members, keeps their names, and sends events to one member or all of them.
+      Installed by Manifold when it creates a community.
+    >>
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
     use module io.picolabs.pds alias pds
@@ -12,7 +18,8 @@ ruleset io.picolabs.community {
     }
 
     pds_name = function(ref) {
-      wrangler:picoQuery(ref, "io.picolabs.pds", "profile", "name"){"profile"}
+      resp = wrangler:picoQuery(ref, "io.picolabs.pds", "profile", {"key": "name"});
+      resp.typeof() == "Map" && resp{"picoQueryError"}.isnull() => resp{"profile"} | null
     }
 
     liveThingMemberName = function(sub) {
@@ -22,7 +29,7 @@ ruleset io.picolabs.community {
     l1ThingMemberName = function(sub) {
       ref = sub{"Tx"}
       pds_name(ref)
-        || wrangler:picoQuery(ref, "io.picolabs.wrangler", "myself"){"name"}
+        || wrangler:picoQuery(ref, "io.picolabs.wrangler", "myself", {}){"name"}
     }
 
     layer2ThingMemberName = function(sub) {
@@ -30,11 +37,24 @@ ruleset io.picolabs.community {
         || subscription:queryOnSub(sub{"Id"}, "io.picolabs.wrangler", "myself", {}){"name"}
     }
 
-    thingMemberName = function(sub) {
-      cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-      cached{"name"} || liveThingMemberName(sub)
+    thingMemberLinkName = function(sub, cached) {
+      thing_nm = liveThingMemberName(sub);
+      comm_nm = pds:profile("name"){"profile"} || wrangler:myself(){"name"};
+      link_default = comm_nm + ":" + thing_nm;
+      cached_nm = cached{"name"};
+      cached_nm && cached_nm.split(re#:#).length() > 1 => cached_nm | link_default
     }
 
+    thingMemberName = function(sub) {
+      cached = ent:thingInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
+      thingMemberLinkName(sub, cached)
+    }
+
+    /**
+     * The things in this community: its established relationships with Tx_role
+     * thing, each with the thing's name.
+     * @returns Array
+     */
     things = function() {
       subscription:established().filter(function(sub) {
         sub{"Tx_role"} == "thing"
@@ -44,16 +64,32 @@ ruleset io.picolabs.community {
       })
     }
 
+    /**
+     * Query a function on one member thing over its community relationship. Null
+     * if no member has that picoID.
+     * @param id String "the thing's picoID"
+     * @param rid String "ruleset id on the thing"
+     * @param func String "shared function to call"
+     * @param params String "its arguments, JSON-encoded"
+     * @returns Any
+     * @example "thing's name" { "id": "<thing picoID>", "rid": "io.picolabs.wrangler", "func": "name", "params": "{}" }
+     */
     queryThing = function(id, rid, func, params) {
       sub = subscription:established("picoID", id)[0]
       sub.isnull() => null |
       subscription:queryOnSub(sub{"Id"}, rid, func, params.decode())
     }
 
+    // Shared, but not discoverable: event sequences are stored by add_sequence /
+    // remove_sequence, but no rule dispatches them yet.
     sequences = function() {
       ent:sequences
     }
 
+    /**
+     * This community's description, from its PDS profile.
+     * @returns String
+     */
     description = function() {
       pds:profile("description"){"profile"}
     }
@@ -102,6 +138,9 @@ ruleset io.picolabs.community {
     }
   }
 
+  // TODO: raises wrangler install_rulesets_requested (plural), which wrangler 1.0
+  // doesn't handle, so this does nothing. Not discoverable until fixed
+  // (io.picolabs.thing's installApp shows the working pattern).
   rule installApp {
     select when manifold installapp
     pre {}
@@ -122,6 +161,11 @@ ruleset io.picolabs.community {
     }
   }
 
+  /**
+   * Set this community's description (stored in its PDS profile).
+   * @attr description String
+   * @example "set" { "description": "<description>" }
+   */
   rule setDescription {
     select when community new_description
     pre {
@@ -133,16 +177,24 @@ ruleset io.picolabs.community {
     }
   }
 
+  /**
+   * Add a thing to this community: requests a relationship with the thing, which
+   * the thing accepts automatically. Fails (logged) if the thing can't be queried
+   * at eci.
+   * @attr eci String "a channel on the thing that allows queries, e.g. its Manifold Tx (not its family channel)"
+   * @attr host String optional "the thing's engine URL, if on another engine"
+   * @example "same engine" { "eci": "<thing eci>" }
+   */
   rule addThing {
     select when community add_thing
     pre {
       thing_host = event:attr("host") || null
       thing_eci = event:attr("eci")
-      thing = wrangler:picoQuery(thing_eci, "io.picolabs.pds", "profile")
-      thing_id = wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself"){"id"}
-      thing_name = thing{"profile"}{"name"}
-                    || wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself"){"name"}
-      query_ok = thing && thing{"picoQueryError"}.isnull() && thing_id
+      thing = wrangler:picoQuery(thing_eci, "io.picolabs.pds", "profile", {})
+      thing_id = wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself", {}){"id"}
+      thing_name = thing.typeof() == "Map" && thing{"profile"}{"name"}
+                    || wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself", {}){"name"}
+      query_ok = thing.typeof() == "Map" && thing{"picoQueryError"}.isnull() && thing_id
     }
     if query_ok then every {
       send_directive("requesting community-thing subscription", {
@@ -173,13 +225,17 @@ ruleset io.picolabs.community {
   rule thingAdded {
     select when wrangler subscription_added
     pre {
+      bus = event:attr("bus").defaultsTo({})
       isCommunity = event:attr("Tx_role") == "thing"
-      thing = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.pds", "profile") | null
-      thing_id = isCommunity => wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself"){"id"} | null
-      thing_name = thing && thing{"profile"} => thing{"profile"}{"name"}
-                    | wrangler:picoQuery(event:attr("Tx"), "io.picolabs.wrangler", "myself"){"name"}
-      link_name = event:attr("name")
-        .defaultsTo(event:attr("channel_name"))
+      thing_eci = event:attr("Tx")
+      thing = isCommunity => wrangler:picoQuery(thing_eci, "io.picolabs.pds", "profile", {}) | null
+      thing_id = isCommunity => wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself", {}){"id"} | null
+      thing_name = thing.typeof() == "Map" && thing{"profile"}{"name"}
+                    || wrangler:picoQuery(thing_eci, "io.picolabs.wrangler", "myself", {}){"name"}
+      link_name = event:attr("channel_name")
+        .defaultsTo(bus{"channel_name"})
+        .defaultsTo(event:attr("name"))
+        .defaultsTo(bus{"name"})
         .defaultsTo(wrangler:myself(){"name"} + ":" + thing_name)
     }
     if isCommunity && thing_id then noop()
@@ -202,6 +258,14 @@ ruleset io.picolabs.community {
     }
   }
 
+  /**
+   * Send an event to one member thing.
+   * @attr id String "the thing's picoID"
+   * @attr domain String
+   * @attr type String
+   * @attr attrs String "its attributes, JSON-encoded"
+   * @example "one thing" { "id": "<thing picoID>", "domain": "<domain>", "type": "<type>", "attrs": "{}" }
+   */
   rule raiseThingEvent {
     select when community raise_thing_event
     pre {
@@ -218,6 +282,13 @@ ruleset io.picolabs.community {
     })
   }
 
+  /**
+   * Send an event to every member thing.
+   * @attr domain String
+   * @attr type String
+   * @attr attrs String "its attributes, JSON-encoded"
+   * @example "all things" { "domain": "<domain>", "type": "<type>", "attrs": "{}" }
+   */
   rule raiseAllThingsEvent {
     select when community raise_all_things_event
     foreach things() setting(thing)
@@ -251,6 +322,7 @@ ruleset io.picolabs.community {
   //   })
   // }
 
+  // Not discoverable: sequences are stored but nothing dispatches them yet.
   rule addEventSequence {
     select when community add_sequence
     pre {

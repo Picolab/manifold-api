@@ -188,6 +188,15 @@ ruleset io.picolabs.manifold_portable_thing {
       thingExportHintsFromChild(ref)
     }
 
+    /**
+     * Export a thing pico (and its children) for moving to another Manifold. Returns
+     * the encrypted blob plus the hints import_portable_thing needs: the thing's
+     * Manifold name and its donor query channel. Read-only; the thing is untouched.
+     * @param subtreeRootPicoId String "any channel ECI on the thing, its family ECI, or its pico id"
+     * @param secret String "encryption secret; the importer needs the same one"
+     * @returns Map "{ blob, name, donorQueryEci, subtreeRootPicoId, thingFamilyPicoID }"
+     * @example "export" { "subtreeRootPicoId": "<thing eci>", "secret": "<secret>" }
+     */
     exportPortableThing = function(subtreeRootPicoId, secret) {
       blob = portable_subtree:exportSubtree(subtreeRootPicoId, secret)
       hints = thingExportHints(subtreeRootPicoId)
@@ -200,25 +209,28 @@ ruleset io.picolabs.manifold_portable_thing {
       }
     }
 
+    /**
+     * Result of the most recent import_portable_thing on this pico, with
+     * thingQueryEci (the thing's new query channel) when donorQueryEci was given.
+     * @returns Map
+     */
     lastImport = function() {
       ent:lastImport
     }
-
-    __testing = {
-      "queries": [
-        {"name": "exportPortableThing", "args": ["subtreeRootPicoId", "secret"]},
-        {"name": "lastImport"}
-      ],
-      "events": [
-        {
-          "domain": "manifold",
-          "name": "import_portable_thing",
-          "attrs": ["blob", "secret", "name", "donorQueryEci", "renewIngress"]
-        }
-      ]
-    }
   }
 
+  /**
+   * Import a thing exported with exportPortableThing as a child of this Manifold
+   * pico: restores the subtree, installs io.picolabs.thing, subscribes it to
+   * Manifold, and adds it to the registry under name. Raises
+   * manifold:import_portable_thing_done with the result (also in lastImport()).
+   * @attr blob String "from exportPortableThing"
+   * @attr secret String "the secret used to export it"
+   * @attr name String optional "the thing's Manifold name (from the export)"
+   * @attr donorQueryEci String optional "from the export; maps to the thing's new query channel"
+   * @attr renewIngress Boolean optional "mint fresh DIDComm ingress (default true)"
+   * @example "import" { "blob": "<blob>", "secret": "<secret>", "name": "<name>", "donorQueryEci": "<eci>" }
+   */
   rule import_portable_thing {
     select when manifold import_portable_thing
       blob re#.+#

@@ -164,7 +164,6 @@ mount.
 | Pico | Ruleset | When |
 |------|---------|------|
 | Tag Registry | `io.picolabs.manifold_bootstrap` | ~~PDS before `new_tag_registry`~~ engine default |
-| Skills Registry | `io.picolabs.manifold_bootstrap` | ~~PDS before `skills_registry`~~ engine default |
 | Owner | `io.picolabs.manifold_bootstrap` | ~~PDS before `profile`~~ engine default |
 | Manifold hub | `io.picolabs.manifold_owner` | ~~PDS before `manifold_pico`~~ engine default |
 | Thing | `io.picolabs.manifold_pico` | ~~PDS before `thing`~~ engine default |

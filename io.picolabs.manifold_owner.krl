@@ -1,5 +1,12 @@
 ruleset io.picolabs.manifold_owner {
   meta {
+    name "Manifold owner"
+    description <<
+      Represents the human owner of a Manifold mesh. Installed on the Owner pico (a
+      child of the root) with io.picolabs.profile. On install it creates the
+      Manifold child pico and installs io.picolabs.manifold_pico there. Holds the
+      tag-server configuration and the owner's LLM context.
+    >>
     use module io.picolabs.subscription alias Subscriptions
     use module io.picolabs.wrangler alias wrangler
     shares getManifoldPico, getManifoldPicoEci, getTagServer, getLLMContext
@@ -11,6 +18,11 @@ ruleset io.picolabs.manifold_owner {
             "channel_type":"App"
           };
 
+    /**
+     * The owner's Manifold child pico ({ eci, name, parent_eci }), or the string
+     * "No Manifold Pico" if it hasn't been created yet.
+     * @returns Any
+     */
     getManifoldPico = function(){
       children = wrangler:children().filter(function(x) {
         x{"name"} == config{"pico_name"}
@@ -19,6 +31,12 @@ ruleset io.picolabs.manifold_owner {
                              | "No Manifold Pico"
     }
 
+     /**
+      * The ECI of the Manifold pico's manifold channel, for sending manifold events
+      * to it; "No Manifold Pico" if it doesn't exist yet, null if the channel isn't
+      * there yet.
+      * @returns String
+      */
      getManifoldPicoEci = function(){
       children = wrangler:children().filter(function(x) {
         x{"name"} == config{"pico_name"}
@@ -41,15 +59,30 @@ ruleset io.picolabs.manifold_owner {
     }
 
 
+    /**
+     * The tag registry things use for NFC/QR tags, as set by manifold:new_tag_server.
+     * @returns Map "{ eci, host_url }"
+     */
     getTagServer = function() {
       ent:tag_pico
     }
 
+    /**
+     * Context stored for language-model assistants working with this mesh (set with
+     * manifold:updated_context); {} if none.
+     * @returns Map
+     */
     getLLMContext = function() {
       ent:llm_context.defaultsTo({})
     }
   } //end global
 
+  /**
+   * Store context for language-model assistants working with this mesh, replacing
+   * what was there. Read it back with getLLMContext().
+   * @attr context Map "the context to store"
+   * @example "store" { "context": { "<key>": "<value>" } }
+   */
   rule store_llm_context {
     select when manifold updated_context
     pre {
@@ -62,6 +95,13 @@ ruleset io.picolabs.manifold_owner {
     }
   }
 
+  /**
+   * Set the tag registry things use for NFC/QR tags. Bootstrap does this with the
+   * tag registry's registration channel; it must happen before things register tags.
+   * @attr eci String "the tag registry's registration channel"
+   * @attr host_url String optional "the tag registry's engine URL (default: this engine)"
+   * @example "same engine" { "eci": "<registration eci>" }
+   */
   rule configure_tag_server {
     select when manifold new_tag_server
     noop()
@@ -97,6 +137,12 @@ ruleset io.picolabs.manifold_owner {
       last
     }
   }
+  /**
+   * Ask for the Manifold pico's manifold channel. The response directive says
+   * which: "manifold channel" with eci when it exists; "manifold still being
+   * created" or "manifold channel not found" while bootstrap is still running.
+   * The first rule that applies answers (the others stop with last).
+   */
   rule return_existing_channel {
     select when manifold channel_needed
     pre {

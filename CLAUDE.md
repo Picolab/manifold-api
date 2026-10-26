@@ -2,7 +2,7 @@
 
 **Manifold** is a KRL framework for building and operating **meshes of picos** on the [pico engine](https://github.com/Picolab/pico-engine). This repo holds its rulesets, bootstrap automation, integration tests, and docs. Engine-level conventions (KRL rules, layering, terminology) live in the engine repo's `CLAUDE.md`; read that first if it is checked out beside this one (`../pico-engine/CLAUDE.md`). This file covers only what is specific to Manifold.
 
-**Requires:** pico-engine **1.4+** (PDS bundled). Node 22 LTS recommended. Docker for tests.
+**Requires:** pico-engine **1.8+** (rulesets carry `/** */` discovery annotations, and `io.picolabs.journal` and `io.picolabs.safeandmine` build their discovery bindings with `wrangler:schemaBindings`, which is new in 1.8; PDS bundled since 1.4). Node 22 LTS recommended. Docker for tests.
 
 ## Where Manifold sits
 
@@ -20,7 +20,6 @@ Manifold is the layer that **supplies the vocabulary**: owner, thing, community,
 ```
 Root pico                      io.picolabs.manifold_bootstrap
   ├─ Tag Registry              io.picolabs.new_tag_registry
-  ├─ Skills Registry           io.picolabs.manifold.skills_registry   (RIDs + MCP tool defs)
   └─ Owner                     io.picolabs.profile + io.picolabs.manifold_owner
        └─ Manifold             io.picolabs.manifold_pico + notifications (+ app bootstrap RSs)
             ├─ Thing …         io.picolabs.thing (+ app RSs)        ──subscribed to Manifold as manifold_thing
@@ -35,7 +34,7 @@ Solid = parent/child (wrangler). Dashed = relationships/subscriptions (membershi
 |------|------|
 | `io.picolabs.*.krl` (root) | The published rulesets. Table of what installs where is in `README.md` → *Core Rulesets* |
 | `t/` | Integration harness (TypeScript, tsx): `run.ts`, `parse.ts`, `lib/`, `scenarios/*.scenario.ts`, `config.json` |
-| `docs/` | `Manifold.md` (framework overview), `Managing_PDS.md` |
+| `docs/` | `Manifold.md`, `Managing_PDS.md`, **`llms.txt` / `llms-full.txt`**, **`rulesets/*.md`** (generated — `npm run generate:docs`) |
 | `MEMORY.md` | Working log: status, decisions, every gotcha we hit. Long; grep it before guessing |
 | `OLD/`, `fix/` | Gitignored scratch — never publish from here; excluded from the parse gate |
 | `.githooks/pre-commit` | Runs the parse gate when `.krl` files are staged (`npm run hooks:install` once) |
@@ -57,11 +56,12 @@ Default image `picolabs/pico-engine:latest`; override with `PICO_ENGINE_IMAGE=�
 
 | Pattern | How |
 |---------|-----|
+| **Discovery annotations** | Put a `/** */` annotation directly before each rule or shared function callers should see: a description first, then `@attr` / `@param` / `@returns` / `@example` as needed. Everything else (select, condition, emits) is derived. Unannotated = internal. Discovery `bindings()` = `wrangler:schemaBindings(meta:rid)`, never hand-written. Run `node ../pico-engine/packages/krl-compiler/bin/krl-check <file>` and fix warnings |
 | **Delegation with callbacks** | App rulesets ask Manifold to create things/communities and pass `callback_eci` + `rcn` (correlation id). Manifold calls back (`community thing_created`, `community community_completed`) with `{rcn, thingPicoID, thing_eci}`. Stash app context under `ent:pending{rcn}` and finish setup in the callback rule. Never `schedule` and hope |
 | **Callback channel policy** | The `callback_eci` **must** point at a channel whose event policy allows the callback event. The well-known/UI channels do not. Create a dedicated channel (e.g. tagged `manifold_callback`) that allows `community:thing_created` |
 | **Which ECI to use** | Thing's **subscription Tx** (`event:attr("Tx")` / `thingSub{"Tx"}`) for cross-pico sends and queries — **not** `picoID`, which is the family channel and only the parent may use it. Use the Manifold **app channel** for app events; the UI channel's policy blocks non-UI domains |
 | **Notifications** | Raise `manifold add_notification` on the Manifold pico with `picoId`, `message`, `thing`, `app`, `ruleset`. Never call Twilio/Prowl from domain rulesets. Channels are opt-in per subject via `manifold change_notification_setting` (`option`: `Manifold` / `SMS` / `Prowl`) using the pico's **wrangler id** |
-| **Adding a capability to things** | Register in the skills registry (`manifold new_skill_available` with `name`, `rid`, `url`, `tools`), then install per thing. Don't hardcode RID lists in `manifold_pico` |
+| **Adding a capability to things** | Install rulesets on the thing via wrangler (`install_ruleset_request` / UI). Agent tools: pico-engine **1.8 mesh MCP** from `channelSchema` — not the retired skills registry (`archive/io.picolabs.manifold.skills_registry.krl`) |
 | **Profile / contact data** | PDS on the owner pico (`io.picolabs.pds`, engine-bundled). `io.picolabs.profile` is the legacy shim; read phone/email through PDS paths |
 | **Queries over family channels** | `wrangler:picoQuery`, not `skyQuery` |
 | **Deleting children** | `raise wrangler event "child_deletion_request" attributes {"eci": picoID}` |

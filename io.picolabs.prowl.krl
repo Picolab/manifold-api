@@ -18,6 +18,8 @@ ruleset io.picolabs.prowl {
 
   global {
 
+    // Shared but deliberately not discoverable: it returns the Prowl apikey.
+    // TODO: don't share secrets over a query.
     show_configuration = function() {
       return {"apikey": ent:apikey,
               "providerkey": ent:providerkey,
@@ -45,6 +47,13 @@ ruleset io.picolabs.prowl {
   // to use create a channel that allows the prowl domain; delete channel when done testing and configuring for security
 
   // Configure the single, Manifold-wide Prowl account (owner setup).
+  /**
+   * Configure the Manifold-wide Prowl account used for push notifications.
+   * Ignored unless apikey and providerkey are given.
+   * @attr apikey String
+   * @attr providerkey String
+   * @attr application String optional "shown in Prowl (default Pico Labs)"
+   */
   rule save_config {
     select when prowl configuration
     pre {
@@ -79,6 +88,11 @@ ruleset io.picolabs.prowl {
     }
   }
 
+  /**
+   * Send a test Prowl notification with the configured account.
+   * @attr msg String optional "text to include"
+   * @example "test" { "msg": "hello" }
+   */
   rule test_config {
     select when prowl test
     pre {

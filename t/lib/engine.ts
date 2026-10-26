@@ -10,7 +10,32 @@ export async function getUiContext(state: RuntimeState): Promise<UiContext> {
   if (!resp.ok) {
     throw new Error(`GET /api/ui-context failed (${resp.status})`);
   }
-  return resp.json() as Promise<UiContext>;
+  const ctx = (await resp.json()) as UiContext & {
+    hasRoots?: boolean;
+    session?: { authenticated?: boolean };
+  };
+  if (ctx.eci) {
+    return { version: ctx.version, eci: ctx.eci };
+  }
+
+  const localResp = await fetch(`${state.baseUrl}/api/dev/local`);
+  if (localResp.ok) {
+    const local = (await localResp.json()) as {
+      version?: string;
+      rootUiEci?: string | null;
+      hasRoots?: boolean;
+    };
+    if (local.rootUiEci) {
+      return {
+        version: local.version ?? ctx.version,
+        eci: local.rootUiEci,
+      };
+    }
+  }
+
+  throw new Error(
+    `No root UI ECI (hasRoots=${String(ctx.hasRoots)}; passkey session or PICO_ENGINE_AUTO_CREATE_ROOT=1 required)`
+  );
 }
 
 function serializeQueryArg(value: unknown): string {

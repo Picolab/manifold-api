@@ -37,20 +37,16 @@ Check for a local image:
 docker images picolabs/pico-engine
 ```
 
-Build or pull if needed ([pico-engine Dockerfile](https://github.com/Picolab/pico-engine)):
-
-```bash
-docker build -t picolabs/pico-engine:latest https://github.com/Picolab/pico-engine.git
-```
-
-**PDS (Phase F):** tests expect `io.picolabs.pds` bundled in the engine. Until `picolabs/pico-engine:latest`
-on Docker Hub includes PDS, build from a local pico-engine checkout:
+Build from a local **pico-engine** checkout (Hub image is not published; 1.8+ needs passkey-aware harness):
 
 ```bash
 cd ../pico-engine
-docker build -f Dockerfile.local -t picolabs/pico-engine:local .
-export PICO_ENGINE_IMAGE=picolabs/pico-engine:local
+docker build -f Dockerfile.local \
+  --build-context pico-framework=../pico-framework \
+  -t picolabs/pico-engine:latest .
 ```
+
+The test container sets **`PICO_ENGINE_AUTO_CREATE_ROOT=1`** (empty mesh gets a root without passkey) and flushes rulesets via **`/c/…/engine_ui/flush`** (localhost bypass), not **`/api/flush`** (session required).
 
 Override the image without editing config:
 
@@ -331,7 +327,6 @@ four separate tests:
 | Test | Verifies |
 |------|----------|
 | `testTagRegistryPico` | "Tag Registry" child; `io.picolabs.new_tag_registry`; registration ECI in bootstrap status |
-| `testSkillsRegistryPico` | "Skills Registry" child; `io.picolabs.manifold.skills_registry` |
 | `testOwnerPico` | "Owner" child; `io.picolabs.profile` + `io.picolabs.manifold_owner` |
 | `testManifoldPico` | "Manifold" child under owner; `io.picolabs.manifold_pico` plus init rulesets (`notifications`, `twilio.sms`, `prowl`) |
 
@@ -361,7 +356,7 @@ Manifold subscription `Tx` channel.
 |-------|--------|---------|
 | 1 | Done | Docker harness, parse gate, health scenario, teardown policy |
 | 2 | Done | Manifold bootstrap scenarios (tag registry, skills, owner, manifold) |
-| 3 | In progress | Thing/community scenarios done; `sensor-network/t` with `dependsOn` planned |
+| 3 | Done | Thing/community scenarios; **sensor-network** `t/` reuses this harness via `dependsOn` |
 | 4 | Planned | Test RS / open channels for async multi-pico flows |
 
 ## Troubleshooting

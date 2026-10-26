@@ -19,6 +19,8 @@ recipient is supplied per-send by the notifications orchestrator.
 
   global {
 
+    // Shared but deliberately not discoverable: it returns the Twilio auth_token.
+    // TODO: don't share secrets over a query.
     show_configuration = function() {
       return {"account_sid": ent:account_sid,
               "auth_token": ent:auth_token,
@@ -43,6 +45,13 @@ recipient is supplied per-send by the notifications orchestrator.
   }
 
   // Configure the single, Manifold-wide Twilio account (owner setup).
+  /**
+   * Configure the Manifold-wide Twilio account used for SMS notifications.
+   * Ignored unless all three values are given.
+   * @attr twilio_account_sid String
+   * @attr twilio_auth_token String
+   * @attr twilio_from_number String "the Twilio number, E.164 format (+1…)"
+   */
   rule save_config {
     select when twilio configuration
     pre {
@@ -78,6 +87,7 @@ recipient is supplied per-send by the notifications orchestrator.
   }
 
   // to use create a channel that allows the twilio domain; delete channel when done testing for security
+  // Not discoverable. TODO: sends to a hard-coded phone number.
   rule test_config {
     select when twilio test
     pre {

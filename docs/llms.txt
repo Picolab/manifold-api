@@ -1,0 +1,36 @@
+# Manifold docs (llms.txt)
+
+Machine-readable index for agents building on Manifold (KRL mesh framework on pico-engine).
+
+## Start here
+
+- Repo `CLAUDE.md` — layering, mesh shape, conventions
+- Engine operator guide: `pico-engine` → `packages/pico-engine/public/docs/pico-engine.md`
+- Requires **pico-engine 1.8+** and **wrangler** for lifecycle (use `manifold:*` / domain events, not raw `ctx:`)
+
+## Manifold docs
+
+- Manifold overview: docs/Manifold.md
+- Managing PDS: docs/Managing_PDS.md
+- Ruleset index: docs/rulesets/README.md
+
+## Ruleset API (generated from KRL)
+
+- io.picolabs.community: docs/rulesets/io.picolabs.community.md
+- io.picolabs.homeassistant: docs/rulesets/io.picolabs.homeassistant.md
+- io.picolabs.journal: docs/rulesets/io.picolabs.journal.md
+- io.picolabs.manifold_bootstrap: docs/rulesets/io.picolabs.manifold_bootstrap.md
+- io.picolabs.manifold_owner: docs/rulesets/io.picolabs.manifold_owner.md
+- io.picolabs.manifold_pico: docs/rulesets/io.picolabs.manifold_pico.md
+- io.picolabs.manifold_portable_thing: docs/rulesets/io.picolabs.manifold_portable_thing.md
+- io.picolabs.new_tag_registry: docs/rulesets/io.picolabs.new_tag_registry.md
+- io.picolabs.notifications: docs/rulesets/io.picolabs.notifications.md
+- io.picolabs.profile: docs/rulesets/io.picolabs.profile.md
+- io.picolabs.prowl: docs/rulesets/io.picolabs.prowl.md
+- io.picolabs.safeandmine: docs/rulesets/io.picolabs.safeandmine.md
+- io.picolabs.thing: docs/rulesets/io.picolabs.thing.md
+- io.picolabs.twilio.sms: docs/rulesets/io.picolabs.twilio.sms.md
+
+## Regenerate
+
+`npm run generate:docs` (needs pico-engine checkout for krl-schema)

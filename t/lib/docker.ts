@@ -114,7 +114,7 @@ export async function startEngine(
     "-p",
     `${hostPort}:3000`,
     "-e",
-    "TESTING=1",
+    "PICO_ENGINE_AUTO_CREATE_ROOT=1",
     "-e",
     `PICO_ENGINE_BASE_URL=http://localhost:${hostPort}`,
     "-v",

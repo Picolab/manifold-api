@@ -62,6 +62,17 @@ interface PicoDetails {
 const MANIFOLD_APP_CHANNEL = "Manifold";
 const MANIFOLD_APP_TAG = "manifold";
 
+/** KRL arrays sometimes arrive as JSON objects with numeric keys over HTTP. */
+function asSubscriptionList(raw: unknown): ManifoldSubscription[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (raw && typeof raw === "object") {
+    return Object.values(raw) as ManifoldSubscription[];
+  }
+  return [];
+}
+
 export async function getManifoldAppEci(
   state: RuntimeState,
   manifoldUiEci: string
@@ -112,24 +123,26 @@ export async function getThingCommunities(
   state: RuntimeState,
   thingQueryEci: string
 ): Promise<ManifoldSubscription[]> {
-  return query<ManifoldSubscription[]>(
+  const raw = await query<unknown>(
     state,
     thingQueryEci,
     "io.picolabs.thing",
     "communities"
   );
+  return asSubscriptionList(raw);
 }
 
 export async function getCommunityThings(
   state: RuntimeState,
   communityQueryEci: string
 ): Promise<ManifoldSubscription[]> {
-  return query<ManifoldSubscription[]>(
+  const raw = await query<unknown>(
     state,
     communityQueryEci,
     "io.picolabs.community",
     "things"
   );
+  return asSubscriptionList(raw);
 }
 
 export async function getCommunityDescription(

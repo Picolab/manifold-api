@@ -1,5 +1,12 @@
 ruleset io.picolabs.thing {
   meta {
+    name "Manifold thing"
+    description <<
+      Base ruleset for a Manifold thing pico: a trackable object or device. Accepts
+      community membership, keeps community names, notifies communities of its
+      events, and installs app rulesets. Installed by Manifold when it creates a
+      thing.
+    >>
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
     shares communities
@@ -8,16 +15,34 @@ ruleset io.picolabs.thing {
 
     app = {"name":"thing","version":"0.0"/* img: , pre: , ..*/};
 
+    /**
+     * The communities this thing belongs to: its established relationships with
+     * Tx_role community, each with the community's name and description.
+     * @returns Array
+     */
+    communityProfileFromEci = function(eci) {
+      wr = wrangler:picoQuery(eci, "io.picolabs.wrangler", "myself", {});
+      wr.typeof() == "Map" && wr{"name"} => {"name": wr{"name"}} | {}
+    }
+
+    communityLinkName = function(sub, cached, pds_profile) {
+      thing_nm = wrangler:myself(){"name"};
+      comm_nm = pds_profile{"name"}
+                  || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself", {}){"name"};
+      link_default = comm_nm + ":" + thing_nm;
+      cached_nm = cached{"name"};
+      cached_nm && cached_nm.split(re#:#).length() > 1 => cached_nm | link_default
+    }
+
     communities = function() {
       subscription:established().filter(function(sub) {
         sub{"Tx_role"} == "community"
       }).map(function(sub) {
         cached = ent:communityInfo.defaultsTo({}){sub{"Id"}}.defaultsTo({});
-        pds_profile = wrangler:picoQuery(sub{"Tx"}, "io.picolabs.pds", "profile"){"profile"}.defaultsTo({});
-        name = cached{"name"} || pds_profile{"name"}
-                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.wrangler", "myself"){"name"};
+        pds_profile = communityProfileFromEci(sub{"Tx"});
+        name = communityLinkName(sub, cached, pds_profile);
         description = cached{"description"} || pds_profile{"description"}
-                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.community", "description");
+                    || wrangler:picoQuery(sub{"Tx"}, "io.picolabs.community", "description", {});
         sub.put(cached).put({"name": name, "description": description})
       })
     }
@@ -53,15 +78,18 @@ ruleset io.picolabs.thing {
   rule communityAdded {
     select when wrangler subscription_added
     pre {
+      bus = event:attr("bus").defaultsTo({})
       isCommunity = event:attr("Tx_role") == "community"
       community_eci = event:attr("Tx")
-      pds_profile = isCommunity => wrangler:picoQuery(community_eci, "io.picolabs.pds", "profile"){"profile"}.defaultsTo({}) | {}
+      pds_profile = isCommunity => communityProfileFromEci(community_eci) | {}
       name = isCommunity => pds_profile{"name"}
                     || wrangler:picoQuery(community_eci, "io.picolabs.wrangler", "myself"){"name"} | null
       description = isCommunity => pds_profile{"description"}
                     || wrangler:picoQuery(community_eci, "io.picolabs.community", "description") | null
-      link_name = event:attr("name")
-        .defaultsTo(event:attr("channel_name"))
+      link_name = event:attr("channel_name")
+        .defaultsTo(bus{"channel_name"})
+        .defaultsTo(event:attr("name"))
+        .defaultsTo(bus{"name"})
         .defaultsTo(name + ":" + wrangler:myself(){"name"})
     }
     if isCommunity then noop()
@@ -73,6 +101,17 @@ ruleset io.picolabs.thing {
     }
   }
 
+  /**
+   * Send an event to this thing's communities, which receive it as
+   * community:thing_event_occurred with domain, type, attrs, and this thing's id
+   * as sender_id. Goes to all of them unless community_eci names one.
+   * @attr domain String "domain of the event to report"
+   * @attr type String "type of the event to report"
+   * @attr attrs Map optional "its attributes"
+   * @attr community_eci String optional "only this community (its Tx channel)"
+   * @example "all communities" { "domain": "<domain>", "type": "<type>", "attrs": {} }
+   * @example "one community" { "domain": "<domain>", "type": "<type>", "attrs": {}, "community_eci": "<eci>" }
+   */
   rule notifyCommunity {
     select when thing community_notify
     // if community_eci is provided, notify only that community; otherwise notify all
@@ -108,6 +147,12 @@ ruleset io.picolabs.thing {
     }
   }
 
+  /**
+   * Install an app ruleset on this thing. The ruleset must be in the same
+   * directory as io.picolabs.thing (the manifold-api rulesets).
+   * @attr rid String "the app ruleset's id"
+   * @example "SafeAndMine" { "rid": "io.picolabs.safeandmine" }
+   */
   rule installApp {
     select when manifold installapp
     pre {
@@ -123,6 +168,10 @@ ruleset io.picolabs.thing {
     }
   }
 
+  /**
+   * Uninstall an app ruleset from this thing.
+   * @attr rid String "the app ruleset's id"
+   */
   rule uninstallApp {
     select when manifold uninstallapp
     pre {}

@@ -17,11 +17,24 @@ ruleset io.picolabs.safeandmine {
 
     safeandmine_ns = "safeandmine"
 
-    getInformation = function(info) {
+    /**
+     * The owner contact information shown to someone who scans this thing's tag:
+     * name, email, phone, message, and shareName / sharePhone / shareEmail flags.
+     * With info, just that field.
+     * @param info String "one field; omit for all"
+     * @returns Any
+     * @example "all" {}
+     * @example "message" { "info": "message" }
+     */
+    getInformation = function(info = null) {
       data = pds:items(safeandmine_ns, "contact"){"general"}.defaultsTo({});
       info => data{info} | data
     }
     
+    /**
+     * Tags registered on this thing: tag IDs by domain.
+     * @returns Map "{ <domain>: [tagID, …] }"
+     */
     getTags = function() {
       ent:tagStore.defaultsTo({}).klog("tag store").map(function(v,k) {
         v.keys()
@@ -30,7 +43,8 @@ ruleset io.picolabs.safeandmine {
     
     // Discovery: `app` and `bindings()` are returned by the discovery rule in response
     // to `discovery capabilities`. Integrators (HA, Manifold UI, etc.) use them to learn what
-    // this ruleset exposes — not internal KRL rule names. See pico-engine docs: krl/discovery.md
+    // this ruleset exposes. Bindings come from this ruleset's /** */ annotations
+    // (pico-engine 1.8+); see pico-engine docs: krl/discovery.md
     app = {
       "name": "safeandmine",
       "title": "SafeAndMine",
@@ -38,62 +52,7 @@ ruleset io.picolabs.safeandmine {
       "description": "QR/NFC name tags: register tags on this thing and share owner contact info when scanned."
     };
     bindings = function(){
-      {
-        "version": 1,
-        "queries": [
-          {
-            "name": "getInformation",
-            "args": ["info"],
-            "description": "Owner contact info shown to finders (all fields, or one field by name)."
-          },
-          {
-            "name": "getTags",
-            "description": "Tag IDs registered on this thing."
-          }
-        ],
-        "events": [
-          {
-            "domain": "safeandmine",
-            "name": "update",
-            "attrs": ["name", "email", "phone", "message", "shareName", "sharePhone", "shareEmail"],
-            "description": "Set or update owner contact information."
-          },
-          {
-            "domain": "safeandmine",
-            "name": "delete",
-            "attrs": ["toDelete"],
-            "description": "Remove one contact field or all contact info."
-          },
-          {
-            "domain": "safeandmine",
-            "name": "notify",
-            "attrs": ["tagID"],
-            "description": "Raised when someone scans a registered tag (also forwarded as a notification)."
-          },
-          {
-            "domain": "safeandmine",
-            "name": "new_tag",
-            "attrs": ["tagID", "domain"],
-            "description": "Register a QR or NFC tag on this thing."
-          },
-          {
-            "domain": "safeandmine",
-            "name": "deregister",
-            "attrs": ["tagID", "domain"],
-            "description": "Remove a registered tag from this thing."
-          }
-        ],
-        "notifications": {
-          "trigger": {"domain": "safeandmine", "name": "notify", "attrs": ["tagID"]},
-          "forward": {
-            "pico": "manifold",
-            "domain": "manifold",
-            "name": "add_notification",
-            "attrs": ["picoId", "thing", "app", "message", "ruleset"]
-          },
-          "channels": ["Manifold", "SMS", "Prowl", "HomeAssistant"]
-        }
-      }
+      wrangler:schemaBindings(meta:rid)
     }
     
     getPolicyID = function(){
@@ -191,6 +150,19 @@ ruleset io.picolabs.safeandmine {
     
   }
   
+  /**
+   * Set the owner contact information shown when this thing's tag is scanned. Send
+   * only the fields to change. name, email, and phone are cut to 100 characters,
+   * message to 250. The share flags say which fields a finder sees.
+   * @attr name String optional
+   * @attr email String optional
+   * @attr phone String optional
+   * @attr message String optional "shown to the finder"
+   * @attr shareName Boolean optional
+   * @attr sharePhone Boolean optional
+   * @attr shareEmail Boolean optional
+   * @example "contact" { "name": "<name>", "phone": "<phone>", "message": "Please call if found", "shareName": true, "sharePhone": true }
+   */
   rule information_update {
     select when safeandmine update
     pre {
@@ -220,6 +192,12 @@ ruleset io.picolabs.safeandmine {
     
   }
   
+  /**
+   * Remove one contact field, or all contact information if toDelete is omitted.
+   * @attr toDelete String optional "field to remove"
+   * @example "one field" { "toDelete": "phone" }
+   * @example "everything" {}
+   */
   rule information_delete {
     select when safeandmine delete
     
@@ -246,6 +224,15 @@ ruleset io.picolabs.safeandmine {
     
   }
   
+  /**
+   * Register a QR or NFC tag on this thing. Creates a channel for the tag and
+   * registers it with the mesh's tag registry; the tag appears in getTags() once
+   * the registry confirms. Tag IDs are stored in upper case.
+   * @attr tagID String
+   * @attr domain String "tag domain, e.g. qr or nfc"
+   * @attr pico_host String optional "this engine's public URL, if the registry is elsewhere"
+   * @example "QR tag" { "tagID": "<tag id>", "domain": "qr" }
+   */
   rule new_tag {
     select when safeandmine new_tag
     
@@ -345,13 +332,18 @@ ruleset io.picolabs.safeandmine {
     always {
       ent:channels := ent:channels.splice(ent:channels.index(event:attr("label")), 1);
       
-      raise wrangler event "channel_deletion_requested"
+      raise wrangler event "channel_deletion_request"
           attributes {
             "eci" : event:attr("label")
           }
     }
   }
   
+  /**
+   * Remove a tag from this thing and from the tag registry.
+   * @attr tagID String
+   * @attr domain String
+   */
   rule deregister_tag {
     select when safeandmine deregister
     
@@ -403,14 +395,20 @@ ruleset io.picolabs.safeandmine {
     
   }
   
+  /**
+   * A tag on this thing was scanned: notify the owner through Manifold
+   * (manifold:add_notification), with the thing's name and "Your tag … has been
+   * scanned". Sent by the scan flow on the tag's channel.
+   * @attr tagID String "the scanned tag"
+   */
   rule notify {
     select when safeandmine notify
     
     pre {
       parent = wrangler:parent_eci();
-      channels = wrangler:picoQuery(parent, "io.picolabs.wrangler", "channels", {"tags": "manifold"});
+      channels = wrangler:picoQuery(parent, "io.picolabs.wrangler", "channels", {});
       toSend = channels.filter(function(c) {
-        c{"tags"}.length() == 1
+        c{"tags"} >< "Manifold" || c{"tags"} >< "manifold"
       }).head(){"id"}.klog("ECI to send notification");
       tagID = event:attr("tagID");
       picoId = wrangler:myself(){"id"};

@@ -1,12 +1,20 @@
 ruleset io.picolabs.manifold_pico {
   meta {
+    name "Manifold"
+    
+    description <<The operational hub of a Manifold mesh. Creates thing and community
+      picos as its children, keeps each subscribed to Manifold, tracks them in a registry,
+      and hosts the notification platform. Installed on the Manifold pico under the owner.>>
+      
     use module io.picolabs.wrangler alias wrangler
     use module io.picolabs.subscription alias subscription
+    
     shares getManifoldInfo, isAChild, getThings, getCommunities, getTagServer,
       thingRegistryKey, communityRegistryKey
+      
     provides getManifoldInfo, getThings, getCommunities, thingRegistryKey,
       communityRegistryKey
-  }//end meta
+  }
 
   global {
     
@@ -18,13 +26,13 @@ ruleset io.picolabs.manifold_pico {
     appChannelName = "Manifold"
     appChannelType = "App"
 
-    /** Relationships tab name on child picos: counterparty + local display name. */
+    // Relationships tab name on child picos: counterparty + local display name.
     manifoldLinkName = function(childName) {
       childName.isnull() || childName == "" => appChannelName |
       appChannelName + ":" + childName
     }
 
-    /** ent:things/communities display name from link bus name (no cross-pico query). */
+    // ent:things/communities display name from link bus name (no cross-pico query).
     registryNameFromLink = function(linkName) {
       linkName.isnull() || linkName == "" => null |
       linkName.substr(0, appChannelName.length() + 1) == appChannelName + ":" =>
@@ -32,7 +40,7 @@ ruleset io.picolabs.manifold_pico {
       linkName
     }
 
-    /** App channel accepts manifold domain; subscription/wellKnown channels do not. */
+    // App channel accepts manifold domain; subscription/wellKnown channels do not.
     manifoldAppEci = function() {
       ent:app_channel_eci.defaultsTo(
         wrangler:channels()
@@ -41,6 +49,27 @@ ruleset io.picolabs.manifold_pico {
       )
     }
 
+    // App channel (1.8 policy audit): manifold domain events + this RS shared queries only.
+    manifoldAppEventPolicy = function() {
+      {
+        "allow": [{"domain": "manifold", "name": "*"}],
+        "deny": []
+      }
+    }
+
+    manifoldAppQueryPolicy = function() {
+      {
+        "allow": [
+          {"rid": meta:rid, "name": "*"},
+          {"rid": "io.picolabs.notifications", "name": "*"}
+        ],
+        "deny": []
+      }
+    }
+
+    /** Things and communities managed by this Manifold pico, in one call.
+     *  @returns Map "{ things: getThings(), communities: getCommunities() }"
+     */
     getManifoldInfo = function() {
       {
         "things": getThings(),
@@ -60,10 +89,22 @@ ruleset io.picolabs.manifold_pico {
       })
     }
 
+    /**
+     *  Things managed by this Manifold pico, keyed by picoID (the thing's registry key).
+     *  Built from established manifold_thing subscriptions merged with stored registry
+     *  data, so a thing whose subscription hasn't completed yet does not appear. Each row
+     *  has name, picoID, subID, color, pos, and queryEci (also as Tx): use queryEci, not
+     *  picoID, to send events to or query the thing.
+     *  @returns Map
+     */
     getThings = function() {
       entMap = ent:things.defaultsTo({})
       thingSubscriptionRows().reduce(function(acc, b) {
-        picoID = b{"picoID"}
+        picoID = b{"picoID"}.isnull() || b{"picoID"} == "" =>
+          entMap.keys().filter(function(k) {
+            entMap{k}{"subID"} == b{"Id"}
+          }).head() |
+          b{"picoID"}
         stored = entMap{picoID}.defaultsTo({})
         name = registryNameFromLink(b{"name"}).defaultsTo(b{"name"})
         queryEci = stored{"queryEci"}.defaultsTo(b{"Tx"})
@@ -83,6 +124,11 @@ ruleset io.picolabs.manifold_pico {
       ent:tutorial.defaultsTo(false);
     }
 
+    /** Communities managed by this Manifold pico, keyed by picoID (the community's
+     *  registry key). Like getThings(), only communities with an established
+     *  manifold_community subscription appear. Each row has name, picoID, subID, color, pos.
+     *  @returns Map
+     */
     getCommunities = function() {
       entMap = ent:communities.defaultsTo({})
       communitySubscriptionRows().reduce(function(acc, b) {
@@ -125,7 +171,7 @@ ruleset io.picolabs.manifold_pico {
       theMapToCheck.defaultsTo({}){[picoID, "subID"]}
     }
 
-    /** Manifold ↔ thing bus on this pico (registry subID may be stale after failed import). */
+    // Manifold ↔ thing bus on this pico (registry subID may be stale after failed import).
     thingManifoldSub = function(picoID) {
       subID = subIDFromPicoID(picoID, ent:things)
       byId = subID.isnull() == false && subID != ""
@@ -139,6 +185,7 @@ ruleset io.picolabs.manifold_pico {
       }).head()
     }
 
+    // Shared for use by other Manifold rulesets; deliberately not discoverable.
     isAChild = function(picoID) {
       children = wrangler:children() // .klog("Children in isAChild()");
       childIDs = children.map(function(child) {
@@ -155,7 +202,12 @@ ruleset io.picolabs.manifold_pico {
       ent:communities.defaultsTo({}).keys() >< picoID
     }
 
-    /** ent:things key (family channel ECI) for remove_thing / getThings. */
+    /** Normalize a reference to a thing into its registry key (the key used by
+     *  getThings() and remove_thing). Null if the thing isn't in the registry.
+     *  @param ref String "the registry key itself, the thing's queryEci, or its picoID"
+     *  @returns String
+     * @example "from queryEci" { "ref": "<eci>" }
+     */
     thingRegistryKey = function(ref) {
       ref.isnull() || ref == "" => null |
       ent:things.defaultsTo({}).keys() >< ref => ref |
@@ -165,6 +217,10 @@ ruleset io.picolabs.manifold_pico {
       }).head()
     }
 
+    /** Normalize a reference to a community into its registry key. Null if unknown.
+     *  @param ref String "the registry key itself or the community's picoID"
+     *  @returns String
+     */
     communityRegistryKey = function(ref) {
       ref.isnull() || ref == "" => null |
       ent:communities.defaultsTo({}).keys() >< ref => ref |
@@ -174,6 +230,9 @@ ruleset io.picolabs.manifold_pico {
       }).head()
     }
 
+    /** The tag registry Manifold uses for NFC/QR tags, as configured on the owner pico.
+     *  @returns Any "whatever io.picolabs.manifold_owner:getTagServer() returns"
+     */
     getTagServer = function() {
       parent = wrangler:parent_eci().klog("parent") // ask mom
       tag_pico = wrangler:picoQuery(parent, "io.picolabs.manifold_owner", "getTagServer")
@@ -198,6 +257,24 @@ ruleset io.picolabs.manifold_pico {
   
 
 
+  /**
+   * Create a thing pico as a child of Manifold, install io.picolabs.thing on it, and
+   * subscribe it to Manifold as a manifold_thing. Only acts while Manifold has at most
+   * 100 children. Other attrs are passed through to wrangler new_child_request
+   * (e.g. backgroundColor).
+   * 
+   * Asynchronous: the thing appears in getThings() once its subscription is
+   * established. To be told when it's ready, pass both callback_eci and rcn (unique identifier);
+   * community:thing_created and community:thing_completed are then sent to
+   * callback_eci with rcn, thingPicoID, thing_eci, and thingWranglerId. The
+   * callback channel's policy must allow those events. 
+   *
+   * @attr name String "display name for the new thing"
+   * @attr callback_eci String optional "channel to notify when the thing is ready; needs rcn"
+   * @attr rcn String optional "caller's correlation id, echoed in the callback; needs callback_eci"
+   * @example "named" { "name": "<name>" }
+   * @example "with callback" { "name": "<name>", "callback_eci": "<eci>", "rcn": "<correlation id>" }
+   */   
   rule createThing {
     select when manifold create_thing
     if event:attr("name") && wrangler:children().length() <= max_picos then
@@ -264,6 +341,16 @@ ruleset io.picolabs.manifold_pico {
   }
 
   // Portable import (and other flows) may index a thing before subscription_added.
+  /**
+   * Add or update a thing in Manifold's registry without creating a pico, e.g. after a
+   * portable import and before its Manifold subscription exists. Keeps any existing
+   * subID and color.
+   *
+   * @attr picoID String "registry key for the thing (its family-channel ECI)"
+   * @attr name String "display name"
+   * @attr queryEci String optional "ECI for talking to the thing, normally its Manifold subscription Tx"
+   * @example "index" { "picoID": "<thing picoID>", "name": "<name>", "queryEci": "<eci>" }
+   */
   rule registerThingIndex {
     select when manifold register_thing_index
     pre {
@@ -411,6 +498,23 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Create a community pico as a child of Manifold, install io.picolabs.community on
+   * it, subscribe it to Manifold as a manifold_community, and set its description and
+   * PDS profile. Only acts while Manifold has at most 100 children. Other attrs are
+   * passed through to wrangler new_child_request.
+   *
+   * Asynchronous: the community appears in getCommunities() once its subscription is
+   * established. Pass callback_eci and rcn to receive community:community_completed
+   * with rcn, communityPicoID, and community_eci.
+   *
+   * @attr name String "display name for the new community"
+   * @attr description String optional "shown on the community and stored in its PDS profile"
+   * @attr callback_eci String optional "channel to notify when the community is ready; needs rcn"
+   * @attr rcn String optional "caller's correlation id, echoed in the callback; needs callback_eci"
+   * @example "named" { "name": "<name>", "description": "<description>" }
+   * @example "with callback" { "name": "<name>", "callback_eci": "<eci>", "rcn": "<correlation id>" }
+   */
   rule createCommunity {
     select when manifold new_community
     if event:attr("name") && wrangler:children().length() <= max_picos then
@@ -550,6 +654,15 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Make a thing a member of a community. Both must already be in Manifold's registry
+   * with established subscriptions, or nothing happens. The community then forms its
+   * own subscription with the thing; check membership with the community's things().
+   *
+   * @attr thingPicoID String "the thing's registry key (see thingRegistryKey)"
+   * @attr communityPicoID String "the community's registry key (see communityRegistryKey)"
+   * @example "add" { "thingPicoID": "<thing picoID>", "communityPicoID": "<community picoID>" }
+   */
   rule addThingToCommunity {
     select when manifold add_thing_to_community
     pre {
@@ -568,6 +681,17 @@ ruleset io.picolabs.manifold_pico {
       })
   }
 
+  /**
+   * Remove a thing from a community by cancelling the thing's community subscription.
+   * The thing and the community both remain.
+   *
+   * @attr thingPicoID String "the thing's registry key"
+   * @attr communityPicoID String "the community's registry key"
+   * @example "remove" { "thingPicoID": "<thing picoID>", "communityPicoID": "<community picoID>" }
+   */
+  // TODO: community_member_sub takes the thing's FIRST community subscription; it never
+  // compares against communityPicoID, so a thing in several communities may be removed
+  // from the wrong one.
   rule removeThingFromCommunity {
     select when manifold remove_thing_from_community
     pre {
@@ -627,6 +751,10 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Rebuild the thing registry from established manifold_thing subscriptions, dropping
+   * entries that have none. Runs automatically when this ruleset is installed or upgraded.
+   */
   rule reconcileThingRegistry {
     select when manifold reconcile_thing_registry
     fired {
@@ -634,6 +762,10 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Rebuild the community registry from established manifold_community subscriptions.
+   * Runs automatically when this ruleset is installed or upgraded.
+   */
   rule reconcileCommunityRegistry {
     select when manifold reconcile_community_registry
     fired {
@@ -670,6 +802,15 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Remove a thing: cancel its Manifold subscription, then delete its pico. If the
+   * subscription is already gone (e.g. after a failed import), the registry entry and
+   * any orphaned child pico are removed directly. Communities the thing belonged to are
+   * not notified. Done when the thing disappears from getThings(); there is no callback.
+   *
+   * @attr picoID String "the thing's registry key, queryEci, or picoID"
+   * @example "by registry key" { "picoID": "<thing picoID>" }
+   */
   rule removeThingSubscription {
     select when manifold remove_thing
     pre {
@@ -689,6 +830,8 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  // remove_thing, case 2 (no subscription). Not annotated: the operation is documented
+  // once, on removeThingSubscription.
   rule removeThingOrphan {
     select when manifold remove_thing
     pre {
@@ -745,6 +888,14 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Remove a community: cancel its Manifold subscription, then delete its pico. Member
+   * things are not deleted. Done when it disappears from getCommunities().
+   *
+   * @attr picoID String "the community's registry key"
+   * @attr name String optional "used only in the response if the community isn't in the registry"
+   * @example "by registry key" { "picoID": "<community picoID>" }
+   */
   rule removeCommunity {
     select when manifold remove_community
     pre {
@@ -776,6 +927,17 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Save a thing's position and size on the Manifold dashboard grid. Ignored unless
+   * picoID is a registered thing. Numeric strings are accepted.
+   *
+   * @attr picoID String "the thing's registry key"
+   * @attr x Number "grid column"
+   * @attr y Number "grid row"
+   * @attr w Number "width in grid units (min 3, max 8)"
+   * @attr h Number "height in grid units (min 2.25, max 5)"
+   * @example "move" { "picoID": "<thing picoID>", "x": 0, "y": 0, "w": 3, "h": 2.25 }
+   */
   rule updateThingLocation {
     select when manifold move_thing
     pre {
@@ -797,6 +959,16 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Save a community's position and size on the Manifold dashboard grid. Ignored unless
+   * picoID is a registered community.
+   *
+   * @attr picoID String "the community's registry key"
+   * @attr x Number "grid column"
+   * @attr y Number "grid row"
+   * @attr w Number "width in grid units"
+   * @attr h Number "height in grid units"
+   */
   rule updateCommunityLocation {
     select when manifold move_community
     pre {
@@ -818,6 +990,7 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  // Clears both registries without deleting any picos. Deliberately not discoverable.
   rule devReset {
     select when manifold devReset
     always{
@@ -826,6 +999,13 @@ ruleset io.picolabs.manifold_pico {
     }
   }
 
+  /**
+   * Rename a thing in Manifold's registry and in the thing's own PDS profile.
+   *
+   * @attr picoID String "the thing's registry key"
+   * @attr changedName String "new display name"
+   * @example "rename" { "picoID": "<thing picoID>", "changedName": "<name>" }
+   */
   rule changeThingName {
     select when manifold change_thing_name
 
@@ -868,6 +1048,12 @@ ruleset io.picolabs.manifold_pico {
   }
 
   // Opt-in portable thing move (engine portable_subtree + manifold_portable_thing; not part of bootstrap)
+  /**
+   * Opt in to moving things between engines: installs the engine's
+   * io.picolabs.portable_subtree and then io.picolabs.manifold_portable_thing on this
+   * pico. Safe to repeat; does nothing once both are installed. Check with
+   * wrangler:installedRIDs().
+   */
   rule enable_portable_thing_install_engine_rs {
     select when manifold enable_portable_thing
     pre {
@@ -946,12 +1132,21 @@ ruleset io.picolabs.manifold_pico {
       channel_exists = app_channel.length() > 0;
     }
     if not channel_exists then
-      wrangler:createChannel([appChannelName], null, null) setting(channel)
+      wrangler:createChannel(
+        [appChannelName, appChannelType],
+        manifoldAppEventPolicy(),
+        manifoldAppQueryPolicy()
+      ) setting(channel)
     fired {
       ent:app_channel_eci := channel{"id"}
     }
   }
 
+  /**
+   * Install any notification-platform rulesets this Manifold pico is missing
+   * (notifications, Twilio SMS, Prowl, Home Assistant). Use after upgrading a Manifold
+   * that predates them.
+   */
   rule updateManifoldVersion {
     select when manifold update_version
     foreach ["io.picolabs.notifications",

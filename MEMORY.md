@@ -98,7 +98,7 @@ Engine requirement: **pico-engine 1.4+** (`npm install -g pico-engine@1.4.0` or 
 | File | Coverage |
 |------|----------|
 | `health.scenario.ts` | Engine HTTP reachable |
-| `bootstrap.scenario.ts` | Tag registry, skills registry, owner, manifold picos |
+| `bootstrap.scenario.ts` | Tag registry, owner, manifold picos (skills registry removed — use engine 1.8 MCP) |
 | `pds.scenario.ts` | PDS installed on bootstrap picos; profile/general read/write |
 | `thing-community.scenario.ts` | Create thing/community, add/remove, delete |
 | `safeandmine.scenario.ts` | Contact info, tag-scan notification, tag registry register/deregister |

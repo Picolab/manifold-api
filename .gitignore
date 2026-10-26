@@ -19,6 +19,7 @@ t/.test-context.json
 # Archived / experimental rulesets (local reference only)
 OLD/
 fix/
+tmp/
 
 # OS
 .DS_Store

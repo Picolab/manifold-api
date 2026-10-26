@@ -1,5 +1,13 @@
 ruleset io.picolabs.notifications {
   meta {
+    name "Manifold notifications"
+    description <<
+      The notification platform, installed on the Manifold pico. Things,
+      communities, and apps raise manifold:add_notification; this ruleset records it
+      in the Manifold inbox and fans it out to whichever channels are enabled for the
+      subject pico: SMS (io.picolabs.twilio.sms), Prowl (io.picolabs.prowl), and
+      Home Assistant (io.picolabs.homeassistant). Channels are opt-in per subject pico.
+    >>
     use module io.picolabs.wrangler alias wrangler
     shares getNotifications, getBadgeNumber, getState, getSettings
   }
@@ -29,23 +37,53 @@ ruleset io.picolabs.notifications {
       ent:notification_settings{picoId}{channel} == true
     }
 
+    /**
+     * The Manifold inbox, newest first. Each notification has id, time, and the
+     * attrs it was added with (thing, picoId, app, message, ruleset, …).
+     * @returns Array
+     */
     getNotifications = function () {
       ent:notifications.defaultsTo([]).reverse();
     }
 
+    /**
+     * How many notifications are in the inbox.
+     * @returns Number
+     */
     getBadgeNumber = function () {
       ent:notifications.length()
     }
 
+    /**
+     * The state map stored with a notification (its state attr), by notification id.
+     * @param id String "notification id"
+     * @returns Map
+     */
     getState = function (id) {
       ent:notification_state{id};
     }
 
+    /**
+     * Which channels are on for a subject pico: { Manifold, SMS, Prowl, HomeAssistant }
+     * with true for each one that is on. Null if never set (everything off).
+     * @param id String "the subject pico's id"
+     * @returns Map
+     * @example "one pico" { "id": "<picoId>" }
+     */
     getSettings = function(id) {
       ent:notification_settings{id}
     }
   }
 
+  /**
+   * Turn one delivery channel on or off for a subject pico (it toggles). Channels:
+   * Manifold (the inbox), SMS, Prowl, HomeAssistant. Every channel starts off. An
+   * unknown channel name is ignored with a warning.
+   * @attr id String "the subject pico's wrangler id"
+   * @attr option String "Manifold, SMS, Prowl, or HomeAssistant (case matters)"
+   * @example "toggle inbox" { "id": "<picoId>", "option": "Manifold" }
+   * @example "toggle SMS" { "id": "<picoId>", "option": "SMS" }
+   */
   rule toggleNotificationSetting {
     select when manifold change_notification_setting
     pre {
@@ -63,6 +101,19 @@ ruleset io.picolabs.notifications {
     }
   }
 
+  /**
+   * Notify the owner about a subject pico. Recorded in the inbox and sent on each
+   * channel that is on for picoId (see change_notification_setting); does nothing
+   * on channels that are off. SMS goes to the phone in the owner pico's PDS profile.
+   * Domain rulesets should raise this rather than calling Twilio or Prowl directly.
+   * @attr picoId String "the subject pico's id (whose channel settings apply)"
+   * @attr thing String "subject name shown to the owner"
+   * @attr app String "app that raised it"
+   * @attr message String "the notification text"
+   * @attr ruleset String optional "ruleset that raised it (informational)"
+   * @attr state Map optional "app state to keep with the notification (getState)"
+   * @example "notify" { "picoId": "<picoId>", "thing": "<name>", "app": "<app>", "message": "<message>" }
+   */
   rule addNotification {
     select when manifold add_notification
 
@@ -114,6 +165,10 @@ ruleset io.picolabs.notifications {
     }
   }
 
+  /**
+   * Remove a notification from the inbox.
+   * @attr notificationID String "its id"
+   */
   rule removeNotification {
     select when manifold remove_notification
 

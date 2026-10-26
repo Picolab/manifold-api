@@ -9,11 +9,6 @@ export const TAG_REGISTRY_RULESETS = [
   "io.picolabs.new_tag_registry",
 ] as const;
 
-export const SKILLS_REGISTRY_RULESETS = [
-  PDS_RID,
-  "io.picolabs.manifold.skills_registry",
-] as const;
-
 export const OWNER_RULESETS = [
   PDS_RID,
   "io.picolabs.profile",

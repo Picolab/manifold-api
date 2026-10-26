@@ -15,7 +15,15 @@ ruleset io.picolabs.journal {
   global {
 
     
-    getEntry = function(title) {
+    /**
+     * One journal entry by title, or all entries if no title is given. Each entry
+     * has timestamp, title, and content.
+     * @param title String "entry title; omit for all"
+     * @returns Any
+     * @example "all" {}
+     * @example "one" { "title": "<title>" }
+     */
+    getEntry = function(title = null) {
       (title) => ent:entries.filter(function(x){
         x{"title"} == title
       })[0] | ent:entries;
@@ -27,37 +35,9 @@ ruleset io.picolabs.journal {
       "version": "0.0",
       "description": "Attach notes to this thing (title + content entries)."
     };
+    // Discovery bindings come from this ruleset's /** */ annotations (pico-engine 1.8+).
     bindings = function() {
-      return {
-        "version": 1,
-        "queries": [
-          {
-            "name": "getEntry",
-            "args": ["title"],
-            "description": "Return one entry by title, or all entries when title is omitted."
-          }
-        ],
-        "events": [
-          {
-            "domain": "journal",
-            "name": "new_entry",
-            "attrs": ["title", "content"],
-            "description": "Add a note to this thing."
-          },
-          {
-            "domain": "journal",
-            "name": "delete_entry",
-            "attrs": ["timestamp"],
-            "description": "Remove a note by its entry timestamp."
-          },
-          {
-            "domain": "journal",
-            "name": "edit_entry",
-            "attrs": ["newContent", "timestamp"],
-            "description": "Change the body text of an existing note."
-          }
-        ]
-      }
+      wrangler:schemaBindings(meta:rid)
     }
     
   }
@@ -74,6 +54,13 @@ ruleset io.picolabs.journal {
   }
   
   
+  /**
+   * Add a journal entry to this thing. Its timestamp (when it was added) is its id
+   * for edit_entry and delete_entry.
+   * @attr title String
+   * @attr content String "the note"
+   * @example "note" { "title": "<title>", "content": "<text>" }
+   */
   rule new_entry {
     select when journal new_entry
     
@@ -87,41 +74,49 @@ ruleset io.picolabs.journal {
     
   }
   
+  /**
+   * Delete a journal entry. Does nothing if no entry has that timestamp.
+   * @attr timestamp String "the entry's timestamp (from getEntry)"
+   */
   rule delete_entry {
     select when journal delete_entry
     
     pre {
       timestamp = event:attr("timestamp");
-      toDelete = ent:entries.filter(function(x) {
-        x{"timestamp"} == timestamp
-      })[0];
-      toDeleteIndex = ent:entries.index(toDelete);
+      toDeleteIndex = ent:entries.defaultsTo([])
+        .map(function(x) { x{"timestamp"} })
+        .index(timestamp);
     }
     
-    if (toDelete == -1) then noop();
+    if toDeleteIndex >= 0 then noop();
     
-    notfired {
-      ent:entries := ent:entries.defaultsTo([]).splice(toDeleteIndex, 1);
+    fired {
+      ent:entries := ent:entries.splice(toDeleteIndex, 1);
     }
     
   }
   
+  /**
+   * Replace a journal entry's content. Does nothing if no entry has that timestamp.
+   * @attr timestamp String "the entry's timestamp (from getEntry)"
+   * @attr newContent String
+   */
   rule edit_entry {
     select when journal edit_entry
     
     pre {
       newContent = event:attr("newContent");
       timestamp = event:attr("timestamp");
-      toChange = ent:entries.filter(function(x) {
+      found = ent:entries.defaultsTo([]).any(function(x) {
         x{"timestamp"} == timestamp
-      })[0];
+      });
     }
     
-    if (toChange == -1) then noop();
+    if found then noop();
     
-    notfired {
-      ent:entries := ent:entries.defaultsTo([]).map(function(x){
-        (x == toChange) => x.put("content", newContent) | x;
+    fired {
+      ent:entries := ent:entries.map(function(x) {
+        (x{"timestamp"} == timestamp) => x.put("content", newContent) | x
       })
     }
     

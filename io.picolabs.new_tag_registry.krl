@@ -1,20 +1,47 @@
 ruleset io.picolabs.new_tag_registry {
   meta {
+    name "Manifold tag registry"
+    description <<
+      Maps NFC/QR tags to the thing picos they identify, per tag domain, with a
+      redirect URL for scans. Installed on the Tag Registry pico by bootstrap; things
+      register tags through SafeAndMine.
+    >>
     use module io.picolabs.wrangler alias wrangler
     shares get_tag_store, scan_tag
   }
   global {
     
     
+    /**
+     * What a tag is registered to: { did, pico_host, redirect_url }, or null.
+     * @param tagID String
+     * @param domain String "tag domain, e.g. qr or nfc"
+     * @returns Map
+     */
+    // TODO: reads tagID.uc() but register_tag stores tagID as given, so tags not
+    // registered in upper case are never found (also affects deregister_tag).
     scan_tag = function(tagID, domain) {
       ent:tag_store.defaultsTo({}).get([domain, tagID.uc()])
     }
     
+    /**
+     * Every registered tag, by domain then tagID.
+     * @returns Map
+     */
     get_tag_store = function() {
       ent:tag_store.defaultsTo({})
     }
   }
   
+  /**
+   * Register a tag to a thing, unless the tag is already registered in that
+   * domain. The thing is told with safeandmine:tag_register_response on DID.
+   * @attr tagID String
+   * @attr domain String "tag domain, e.g. qr or nfc"
+   * @attr DID String "the thing's channel for the response"
+   * @attr redirect_url String optional "where scans go (default: the SafeAndMine app)"
+   * @attr pico_host String optional "the thing's engine URL"
+   */
   rule register_tag {
     select when safeandmine register_tag
     
@@ -38,6 +65,11 @@ ruleset io.picolabs.new_tag_registry {
     }
   }
   
+  /**
+   * Remove a tag's registration.
+   * @attr tagID String
+   * @attr domain String
+   */
   rule deregister_tag {
     select when safeandmine deregister_tag
     
@@ -54,6 +86,13 @@ ruleset io.picolabs.new_tag_registry {
     }
   }
   
+  /**
+   * Look up a scanned tag and answer with a _redirect directive to its
+   * redirect URL (or the SafeAndMine app if it isn't registered).
+   * @attr tagID String
+   * @attr domain String
+   */
+  // TODO: did is scan_tag(...)'s whole map, not its did, so DID= in the URL is wrong.
   rule redirect {
     select when safeandmine redirect
     
@@ -69,12 +108,25 @@ ruleset io.picolabs.new_tag_registry {
     send_directive("_redirect", {"url" : url})
   }
 
-  rule createChannel { // fix policies
+  rule createChannel {
     select when wrangler ruleset_installed where event:attr("rids") >< ctx:rid
     pre {
       channelName = "registration"
-      eventPolicy = {"allow": [{"domain": "*", "name": "*"}], "deny": []}
-      queryPolicy = {"allow":[{"rid": "*", "name": "*"}], "deny": []}
+      eventPolicy = {
+        "allow": [
+          {"domain": "safeandmine", "name": "register_tag"},
+          {"domain": "safeandmine", "name": "deregister_tag"},
+          {"domain": "safeandmine", "name": "redirect"}
+        ],
+        "deny": []
+      }
+      queryPolicy = {
+        "allow": [
+          {"rid": meta:rid, "name": "get_tag_store"},
+          {"rid": meta:rid, "name": "scan_tag"}
+        ],
+        "deny": []
+      }
       existing_channels = wrangler:channels().klog("Current channels");
       app_channel = existing_channels.filter(function(chan){
         chan{"name"} == channelName 

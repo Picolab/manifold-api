@@ -11,15 +11,30 @@ ruleset io.picolabs.manifold.skills_registry {
   }
   global {
 
-    // Returns a single skill by name, or the full skills map if no name given.
-    // Each skill entry has: name, rid, tools (map of MCP tool defs), and optional url.
-    getSkills = function(name) {
+    /**
+     * One skill by name, or all skills keyed by name if no name is given. Each has
+     * name, rid, tools (a map of MCP tool definitions by tool name), and an
+     * optional url.
+     * @param name String "skill name; omit for all"
+     * @returns Map
+     * @example "all" {}
+     * @example "one" { "name": "<skill>" }
+     */
+    getSkills = function(name = null) {
       (name) => ent:skills.defaultsTo({}){name}
               | ent:skills.defaultsTo({})
     }
 
   }
 
+  /**
+   * Register a skill, or replace one with the same name.
+   * @attr name String "skill name, the registry key"
+   * @attr rid String "ruleset that implements it"
+   * @attr url String optional "where to install the ruleset from"
+   * @attr tools Map optional "MCP tool definitions keyed by tool name"
+   * @example "register" { "name": "<skill>", "rid": "<rid>", "url": "https://example.com/krl/<rid>.krl", "tools": {} }
+   */
   rule new_skill_available {
     select when manifold new_skill_available
     pre {
@@ -41,6 +56,10 @@ ruleset io.picolabs.manifold.skills_registry {
     }
   }
 
+  /**
+   * Remove a skill from the registry.
+   * @attr name String "skill name"
+   */
   rule remove_skill {
     select when manifold remove_skill
     pre {
@@ -54,6 +73,12 @@ ruleset io.picolabs.manifold.skills_registry {
     }
   }
 
+  /**
+   * Add or replace one MCP tool definition on an existing skill.
+   * @attr name String "skill name"
+   * @attr tool_name String
+   * @attr tool Map "the MCP tool definition"
+   */
   rule new_tool_available {
     select when manifold new_tool_available
     pre {
@@ -69,6 +94,11 @@ ruleset io.picolabs.manifold.skills_registry {
     }
   }
 
+  /**
+   * Remove one MCP tool definition from a skill.
+   * @attr name String "skill name"
+   * @attr tool_name String
+   */
   rule remove_tool {
     select when manifold remove_tool
     pre {

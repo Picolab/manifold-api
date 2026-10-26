@@ -1,13 +1,12 @@
 import { toFileRulesetUrl } from "./config.js";
 import { assertTruthy } from "./assert.js";
-import { getUiContext, query, waitFor } from "./engine.js";
+import { getUiContext, query, signalWait, waitFor } from "./engine.js";
 import type { RuntimeState } from "./types.js";
 
 export interface BootstrapStatus {
   tag_registry_eci: string | null;
   tag_registry_registration_eci: string | null;
   owner_eci: string | null;
-  skills_registry_eci: string | null;
 }
 
 export interface ManifoldBootstrapContext {
@@ -38,18 +37,14 @@ interface PicoDetails {
   rulesets: Array<{ rid: string }>;
 }
 
+/** Flush via root UI channel — `/api/flush` requires passkey; localhost `/c/*` does not. */
 export async function flushRuleset(
   state: RuntimeState,
+  uiEci: string,
   rulesetFile: string
 ): Promise<void> {
   const url = toFileRulesetUrl(manifoldApiMountPath(state), rulesetFile);
-  const resp = await fetch(
-    `${state.baseUrl}/api/flush?url=${encodeURIComponent(url)}`
-  );
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Flush ${rulesetFile} failed (${resp.status}): ${body}`);
-  }
+  await signalWait(state, uiEci, "engine_ui", "flush", { url });
 }
 
 export async function installRuleset(
@@ -102,7 +97,6 @@ async function waitForBootstrapStatus(
       if (
         status.tag_registry_eci &&
         status.owner_eci &&
-        status.skills_registry_eci &&
         status.tag_registry_registration_eci
       ) {
         return status;
@@ -182,7 +176,7 @@ export async function setupManifoldBootstrap(
 ): Promise<ManifoldBootstrapContext> {
   const { eci: rootUiEci } = await getUiContext(state);
 
-  await flushRuleset(state, BOOTSTRAP_RS);
+  await flushRuleset(state, rootUiEci, BOOTSTRAP_RS);
   await installRuleset(state, rootUiEci, BOOTSTRAP_RS, { testing: true });
 
   const bootstrapChannelEci = await waitFor(

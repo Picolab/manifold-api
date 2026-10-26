@@ -1,24 +1,41 @@
 # manifold-api
 
-Manifold is a framework for the [pico engine](https://github.com/Picolab/pico-engine) that enables the creation and orchestration of pico-based systems. These rulesets define the behavior of pico devices in the Manifold ecosystem.
+**Manifold** is the application framework on top of [pico-engine](https://github.com/Picolab/pico-engine) and **wrangler**: it supplies the mesh vocabulary (**owner**, **thing**, **community**, registries, notifications) so you build domain systems as KRL rulesets instead of wiring channels and subscriptions by hand.
 
-This repository contains KRL (Kynetx Rules Language) rulesets for [Manifold](https://manifold.picolabs.io/), updated for compatibility with Pico Engine version 1.0.
+Typical meshes built on Manifold include **multi-owner connected products** (Fuse-style car networks), **personal and household IoT**, **lost-and-found / tagged objects** (SafeAndMine), **Home Assistant** integrations, and **environmental or industrial sensor meshes** — each adds its own bootstrap ruleset on the Manifold pico; Manifold itself stays domain-agnostic.
+
+This repository holds Manifold platform KRL, bootstrap automation, integration tests, and docs ([`docs/Manifold.md`](docs/Manifold.md)). Product site: [manifold.picolabs.io](https://manifold.picolabs.io/).
+
+### Docs for humans and LLMs
+
+| Resource | Purpose |
+|----------|---------|
+| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | Agent guide: layering, mesh shape, conventions |
+| [`docs/llms.txt`](docs/llms.txt) | Index — point Cursor/Claude at this repo |
+| [`docs/llms-full.txt`](docs/llms-full.txt) | Overview + PDS guide concatenated |
+| [`docs/rulesets/`](docs/rulesets/README.md) | **Generated** API reference from KRL annotations (`manifold:create_thing`, …) |
+
+Regenerate ruleset markdown: **`npm run generate:docs`** (requires a sibling **`pico-engine`** checkout for `krl-schema`).
+
+**Requires pico-engine 1.8+**: rulesets carry `/** */` discovery annotations, and `io.picolabs.journal` and `io.picolabs.safeandmine` build their discovery bindings with `wrangler:schemaBindings`, which is new in 1.8. PDS (`io.picolabs.pds`), bundled with the engine since 1.4, is also required.
 
 ## Architecture
 
-Manifold organizes a personal network of picos as a small graph under the engine's root pico, with cross-links formed by subscriptions. The root pico hosts shared registries and the **owner** pico; the owner manages a single **Manifold** pico that creates thing and community picos and tracks them. Things can belong to one or more communities — dashed lines in the diagram are subscriptions (membership and event routing); solid lines are parent/child relationships in the wrangler hierarchy.
+Manifold organizes a personal network of picos as a small graph under the engine's root pico, with cross-links formed by subscriptions. The root pico hosts the **tag registry** and the **owner** pico; the owner manages a single **Manifold** pico that creates thing and community picos and tracks them. Things can belong to one or more communities — dashed lines in the diagram are subscriptions (membership and event routing); solid lines are parent/child relationships in the wrangler hierarchy.
 
-![Manifold network: root pico, tag and skills registries, owner, Manifold pico, and thing/community picos](manifold_network.png)
+![Manifold network: root pico, tag registry, owner, Manifold pico, and thing/community picos](manifold_network.png)
+
+*(Diagram may still show a retired “Skills Registry” pico; bootstrap no longer creates it — use pico-engine 1.8 MCP instead.)*
 
 - **Pico (root)** — The engine's top-level pico. Bootstrap (`io.picolabs.manifold_bootstrap`) runs here and creates the registry and owner child picos. In production this is typically the root of a dedicated Manifold engine instance.
 
 - **Tag Registry** — Child of the root pico running `io.picolabs.new_tag_registry`. Central store for NFC/QR tag IDs mapped to thing picos and redirect URLs (used by SafeAndMine and similar apps). The owner pico holds a reference to its registration channel so things can register tags before use.
 
-- **Skills Registry** — Child of the root pico running `io.picolabs.manifold.skills_registry`. Directory of named skills (ruleset IDs, optional URLs, MCP tool definitions) that can be installed on things. Manifold and things query it when adding capabilities.
-
 - **Owner** — Child of the root pico running `io.picolabs.profile` and `io.picolabs.manifold_owner`. Represents the human owner: contact info, tag-server configuration, and management of the Manifold child pico. Installing `manifold_owner` automatically creates the Manifold pico and installs `io.picolabs.manifold_pico`.
 
-- **Manifold** — Child of the owner pico running `io.picolabs.manifold_pico` plus notification rulesets. The operational hub: creates thing and community picos, maintains subscriptions to them, exposes `getThings()` / `getCommunities()`, and routes notifications (inbox, SMS, Prowl). Other repos (e.g. sensor-network) install additional bootstrap rulesets here to delegate domain-specific setup.
+**MCP / agent tools:** use [pico-engine 1.8+](https://github.com/Picolab/pico-engine) **mesh MCP** and **`channelSchema`** on a channel ECI — not a separate skills-registry pico (see `archive/` for the retired ruleset).
+
+- **Manifold** — Child of the owner pico running `io.picolabs.manifold_pico` plus notification rulesets. The operational hub: creates thing and community picos, maintains subscriptions to them, exposes `getThings()` / `getCommunities()`, and routes notifications (inbox, SMS, Prowl). Domain repos install **additional bootstrap rulesets** here (connected car, HA, sensor mesh, …) to delegate app-specific setup.
 
 - **Blue Backpack** *(thing example)* — A thing pico running `io.picolabs.thing` (often plus domain rulesets such as SafeAndMine). Represents a trackable object or device. Subscribes to Manifold as a `manifold_thing` and can belong to one or more communities (dashed line to Travel in the diagram).
 
@@ -46,7 +63,6 @@ Core platform rulesets — covered by the integration test harness ([`t/README.m
 
 - ✅ **`io.picolabs.manifold_bootstrap.krl`** — One-step bootstrap automation for the root pico
 - ✅ **`io.picolabs.new_tag_registry.krl`** — Refactored for Pico Engine 1.0
-- ✅ **`io.picolabs.manifold.skills_registry.krl`** — Skills registry child pico
 - ✅ **`io.picolabs.profile.krl`** — Updated for Pico Engine 1.0; flat `ent:profile` contact fields
 - ✅ **`io.picolabs.manifold_owner.krl`** — Uses modern Wrangler API; updated channel creation and ruleset installation patterns
 - ✅ **`io.picolabs.manifold_pico.krl`** — Thing/community management, thing-creation delegation (`callback_eci`/`rcn`), notification init RS installs
@@ -104,7 +120,6 @@ Root Pico
 |---|---|---|
 | `io.picolabs.manifold_bootstrap` | Root pico | Automates full bootstrap |
 | `io.picolabs.new_tag_registry` | Tag registry pico | Tag registry |
-| `io.picolabs.manifold.skills_registry` | Skills registry pico | Skills registry |
 | `io.picolabs.profile` | Owner pico | User profile / contact info |
 | `io.picolabs.manifold_owner` | Owner pico | Manages Manifold child pico |
 | `io.picolabs.manifold_pico` | Manifold pico | Thing/community management, notifications init |
@@ -117,9 +132,10 @@ Root Pico
 
 ## Dependencies
 
-All rulesets depend on standard pico engine modules provided by the engine itself:
-- `io.picolabs.wrangler` — pico management
+Requires **pico-engine 1.8+** at runtime. All rulesets depend on standard pico engine modules provided by the engine itself:
+- `io.picolabs.wrangler` — pico management, including `schemaBindings` for discovery (1.8+)
 - `io.picolabs.subscription` — subscription management
+- `io.picolabs.pds` — profile and namespaced data (bundled since 1.4)
 
 ## Accessing Manifold
 
@@ -135,6 +151,12 @@ This repo includes a local TypeScript integration test harness in [`t/`](t/). Te
 
 ```bash
 npm install
+```
+
+**Parse gate / `krl-check`:** `devDependencies` use **`krl-compiler` from npm** (currently **1.5.x**). After **pico-engine 1.8.0** is published, bump to **`krl-compiler@^1.6.0`** in `package.json`. Until then, for full annotation lint against a sibling engine checkout:
+
+```bash
+npm install file:../pico-engine/packages/krl-compiler
 ```
 
 **Quick commands** (from the repo root):
@@ -172,6 +194,8 @@ Domain-specific companions (e.g. sensor-network → `pico_mesh_sensor_network`) 
 
 - All rulesets use the `.krl` extension (some legacy files omit it but are valid KRL)
 - Ruleset IDs match the filename (e.g., `io.picolabs.manifold_owner.krl` → RID `io.picolabs.manifold_owner`)
+- Rules and shared functions meant for callers carry `/** */` **discovery annotations** (description, `@attr`, `@param`, `@returns`, `@example`). They feed the engine's discovery, the developer UI's Testing tab and Docs view, and generated MCP tools. Unannotated rules and functions are internal. Check a file with `krl-check`; see the pico-engine design doc `docs/design/pico-schemas.md`
+- Discovery `bindings()` come from the annotations via `wrangler:schemaBindings(meta:rid)`; don't hand-write them
 
 ## Contributing
 

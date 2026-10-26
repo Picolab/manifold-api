@@ -2,7 +2,7 @@
 
 **Source:** [Picolab/manifold-api](https://github.com/Picolab/manifold-api) on GitHub  
 **Product site:** [manifold.picolabs.io](https://manifold.picolabs.io/)  
-**Runtime:** [Pico Engine](https://github.com/Picolab/pico-engine) 1.4+  
+**Runtime:** [Pico Engine](https://github.com/Picolab/pico-engine) 1.8+  
 **Related:**
 
 - [Managing Subscriptions](https://picolabs.atlassian.net/wiki/spaces/docs/pages/186843209/Managing+Subscriptions)
@@ -39,12 +39,18 @@ Where the pico engine provides execution (rulesets, events, subscriptions, chann
 - **Structure** — a consistent parent/child hierarchy under the engine root
 - **Lifecycle** — automated bootstrap to stand up an owner, hub, and shared registries
 - **Thing and community management** — create picos, track membership, route events
-- **Shared services** — centralized notifications, tag registry, skills directory
+- **Shared services** — centralized notifications, tag registry
 - **Data conventions** — profile and app data via [PDS](./Managing_PDS.md) on every pico
 
-Manifold is not a single application. It is a **platform of KRL rulesets** that domain projects (SafeAndMine, sensor networks, custom IoT stacks) install and extend.
+Manifold is not a single application. It is a **platform of KRL rulesets** that domain projects install and extend — for example:
 
-**Source code:** all Manifold platform rulesets, bootstrap logic, and integration tests are maintained in **[github.com/Picolab/manifold-api](https://github.com/Picolab/manifold-api)**.
+- **Connected product / vehicle meshes** (Fuse-style multi-party car networks)
+- **Household and personal IoT** with things and communities
+- **Tagged objects and lost-and-found** (SafeAndMine on thing picos)
+- **Home Assistant** and similar integrators (`io.picolabs.homeassistant` on the hub)
+- **Sensor or facility monitoring** (dedicated repos add bootstrap rulesets on the Manifold pico)
+
+**Source code:** platform rulesets, bootstrap, tests, and generated API docs live in **[github.com/Picolab/manifold-api](https://github.com/Picolab/manifold-api)** — see [`docs/llms.txt`](llms.txt) and [`docs/rulesets/`](rulesets/README.md).
 
 ---
 
@@ -55,7 +61,6 @@ Manifold organizes a personal network of picos as a small graph under the engine
 ```
 Root Pico (engine)
   ├─ Tag Registry pico
-  ├─ Skills Registry pico
   └─ Owner pico
        └─ Manifold pico (operational hub)
             ├─ Thing picos  ··· subscribe ···► Community picos
@@ -68,7 +73,6 @@ A detailed diagram ships with the repo: [`manifold_network.png`](https://github.
 |------|-------------------|------|
 | **Root** | `io.picolabs.manifold_bootstrap` | One-time bootstrap; creates registries and owner |
 | **Tag Registry** | `io.picolabs.new_tag_registry` | NFC/QR tag IDs → thing picos and redirect URLs |
-| **Skills Registry** | `io.picolabs.manifold.skills_registry` | Named skills (ruleset IDs, MCP tool defs) installable on things |
 | **Owner** | `io.picolabs.profile`, `io.picolabs.manifold_owner` | Human owner; contact info; owns the Manifold child |
 | **Manifold** | `io.picolabs.manifold_pico`, `io.picolabs.notifications`, … | Creates things/communities; tracks inventory; notification hub |
 | **Thing** | `io.picolabs.thing` + domain RSs | Trackable object or device; joins communities |
@@ -103,7 +107,7 @@ Each pico exposes **channels**; an **ECI** (Event Channel Identifier) is the add
 Manifold provides one-step bootstrap on the engine root pico.
 
 1. Install **`io.picolabs.manifold_bootstrap`** on the root pico.
-2. Bootstrap creates the tag registry, skills registry, and owner pico (which in turn creates the Manifold pico).
+2. Bootstrap creates the tag registry and owner pico (which in turn creates the Manifold pico).
 3. Query **`getBootstrapStatus()`** on the root pico's bootstrap channel for ECIs.
 
 Manual step-by-step bootstrap (tag registry first, then owner, then tag-server registration) is documented in the [repository README](https://github.com/Picolab/manifold-api#bootstrap).
@@ -134,9 +138,9 @@ Base behavior lives in:
 
 Maps physical tag identifiers (NFC, QR) to thing picos and redirect URLs. Used by **SafeAndMine** and similar apps so a scanned tag resolves to the correct thing.
 
-### Skills registry
+### Extensibility and discovery (1.8+)
 
-A queryable directory of **skills** — named capabilities (ruleset RIDs, optional install URLs, MCP tool metadata) that can be added to thing picos. Manifold and domain rulesets consult it when extending a thing.
+Domain rulesets document shared events and queries with **`/** … */`** annotations. The pico engine exposes them via **ruleset schema** (UI Testing tab, `ruleset_schema` MCP tool, and `krl check`). Prefer that over ad hoc registries when agents or operators need to discover how to call your bootstrap rulesets.
 
 ---
 
@@ -176,11 +180,21 @@ See **[Managing PDS](./Managing_PDS.md)** for queries, events, namespace convent
 
 Manifold is designed to be extended by **domain repositories** that install additional rulesets on the Manifold pico and delegate setup to it.
 
-**Example: [sensor-network](https://github.com/windley/sensor-network)** — temperature/sensor communities:
+**Reference app: [sensor-network](https://github.com/Picolab/sensor-network)** — LoRaWAN Dragino sensors on Manifold:
 
-- Installs `io.picolabs.sensor.network_bootstrap` on the Manifold pico
-- Raises **`sensor create_community`**; Manifold creates the community child and installs base + sensor rulesets
-- Raises **`sensor initiation`**; Manifold creates thing picos, installs sensor router rulesets, wires subscriptions
+| Piece | Location |
+|-------|----------|
+| Bootstrap RS | `io.picolabs.sensor.network_bootstrap` on the **Manifold pico** |
+| Community RS | `io.picolabs.sensor.community` on each sensor community child |
+| Operator guide | [sensor-network README](https://github.com/Picolab/sensor-network/blob/main/README.md) (delegation flow, Sky event examples) |
+| Integration tests | [sensor-network `t/`](https://github.com/Picolab/sensor-network/tree/main/t) — Docker harness with `dependsOn: manifold-api`, scenarios for community + thing creation |
+| Discovery annotations | `/** … @attr … */` on shared events/queries (engine 1.8 `krl check` / MCP `ruleset_schema`) |
+
+Flow in brief:
+
+1. Install **`io.picolabs.sensor.network_bootstrap`** on the Manifold pico after Manifold bootstrap.
+2. Raise **`sensor create_community`** on the Manifold **app** channel → `manifold new_community` → install `io.picolabs.sensor.community` on the child → opt into notifications.
+3. Raise **`sensor initiation`** on the community **`sensor`** channel → `manifold create_thing` → `community thing_created` callback → `community add_thing` + router rulesets on the thing.
 
 The pattern for new domains:
 
@@ -198,7 +212,6 @@ The pattern for new domains:
 |---------|--------------|---------|
 | `io.picolabs.manifold_bootstrap` | Root | Full network bootstrap |
 | `io.picolabs.new_tag_registry` | Tag registry | Tag ID → thing mapping |
-| `io.picolabs.manifold.skills_registry` | Skills registry | Skills directory |
 | `io.picolabs.profile` | Owner | Owner profile shim (PDS-backed) |
 | `io.picolabs.manifold_owner` | Owner | Manifold child lifecycle |
 | `io.picolabs.manifold_pico` | Manifold | Things, communities, delegation |
@@ -218,7 +231,7 @@ Full list and status notes: [manifold-api README — Ruleset Status](https://git
 
 ### Prerequisites
 
-- [Pico Engine](https://github.com/Picolab/pico-engine) **1.4+** (Docker or npm install)
+- [Pico Engine](https://github.com/Picolab/pico-engine) **1.8+** (Docker or npm install); rulesets carry `/** */` discovery annotations, and `io.picolabs.journal` and `io.picolabs.safeandmine` build their discovery bindings with `wrangler:schemaBindings`, which is new in 1.8
 - KRL rulesets from **[github.com/Picolab/manifold-api](https://github.com/Picolab/manifold-api)**
 
 ### Quick path
@@ -263,7 +276,9 @@ After bootstrap:
 ## Further reading
 
 - **[Picolab/manifold-api](https://github.com/Picolab/manifold-api)** — source, README, integration tests
-- **[Picolab/pico-engine](https://github.com/Picolab/pico-engine)** — runtime and Developer UI
+- **[Ruleset API (generated)](rulesets/README.md)** — annotated events and queries per RID
+- **[llms.txt](llms.txt)** — machine-readable doc index for agents
+- **[Picolab/pico-engine](https://github.com/Picolab/pico-engine)** — runtime, wrangler OS, operator guide
 - **[Managing PDS](./Managing_PDS.md)** — data model and events on every pico
 - **[Managing Subscriptions](https://picolabs.atlassian.net/wiki/spaces/docs/pages/186843209/Managing+Subscriptions)** — cross-pico event routing
 - **[Developer Tips for Pico Engine](https://picolabs.atlassian.net/wiki/spaces/docs/pages/31544297/Developer+Tips+for+Pico+Engine)** — Docker, parsing KRL, local development

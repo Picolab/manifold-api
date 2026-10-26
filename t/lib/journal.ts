@@ -15,7 +15,7 @@ export async function installJournal(
   state: RuntimeState,
   uiEci: string
 ): Promise<void> {
-  await flushRuleset(state, JOURNAL_RS);
+  await flushRuleset(state, uiEci, JOURNAL_RS);
   await installRuleset(state, uiEci, JOURNAL_RS);
   await waitForInstalledRids(state, uiEci, [JOURNAL_RID], "Journal host pico");
 }
