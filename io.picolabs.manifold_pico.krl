@@ -697,12 +697,19 @@ ruleset io.picolabs.manifold_pico {
     pre {
       thingPicoID = event:attr("thingPicoID");
       communityPicoID = event:attr("communityPicoID");
-      commSub = subscription:established("Id", ent:communities.defaultsTo({}){[communityPicoID, "subID"]})[0];
-      thingSub = subscription:established("Id", ent:things.defaultsTo({}){[thingPicoID, "subID"]})[0];
+      thingKey = thingRegistryKey(thingPicoID).defaultsTo(thingPicoID);
+      communityKey = communityRegistryKey(communityPicoID).defaultsTo(communityPicoID);
+      commSub = subscription:established("Id", ent:communities.defaultsTo({}){[communityKey, "subID"]})[0];
+      thingSub = thingManifoldSub(thingKey);
       community_eci = commSub{"Tx"};
-      thing_eci = thingSub{"Tx"};
+      thing_eci = ent:things.defaultsTo({}){thingKey}{"queryEci"}
+        .defaultsTo(thingSub{"Tx"});
       member_subs = thing_eci => wrangler:picoQuery(thing_eci, "io.picolabs.thing", "communities", {}) | [];
-      community_member_sub = member_subs.filter(function(s) { s{"Tx_role"} == "community" }).head();
+      community_member_sub = member_subs.filter(function(s) {
+        s{"Tx_role"} == "community"
+          && (s{"picoID"} == communityKey || s{"picoID"} == communityPicoID)
+      }).head()
+        .defaultsTo(member_subs.filter(function(s) { s{"Tx_role"} == "community" }).head());
     }
     if community_member_sub && thing_eci then
       event:send({
