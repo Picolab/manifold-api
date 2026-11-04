@@ -16,14 +16,16 @@ ruleset io.picolabs.manifold_portable_thing {
 
       Export (query on Manifold app channel):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
-        → { blob, name, donorQueryEci, subtreeRootPicoId, thingFamilyPicoID }
+        → { blob, name, donorQueryEci, export_package, … }
+        Copy export_package (or the whole result), add "secret", paste as import export_package.
         name is the Manifold thing label (ent:things). subtreeRootPicoId may be any channel
         ECI on the thing (including the About tab UI ECI), family ECI, or internal pico id.
         Secret is input only — not echoed.
 
       Import (event on Manifold app channel):
-        raise manifold event "import_portable_thing"
-          attributes { "blob", "secret", "name", "donorQueryEci", "renewIngress" }
+        Copy exportPortableThing JSON, add "secret": "<same secret used at export>",
+        then raise manifold event "import_portable_thing"
+          attributes { "export_package": <that object> }
         → import_portable_thing_done (+ thingQueryEci when donorQueryEci is set)
     >>
     author "PICOLABS"
@@ -52,6 +54,34 @@ ruleset io.picolabs.manifold_portable_thing {
         | stripOuterQuotes(
             (value.typeof() == "String" => value | value + "").trim()
           )
+    }
+
+    /** Map or JSON string from UI paste (exportPortableThing result + secret). */
+    parseExportPackage = function(raw) {
+      pkg = raw.isnull() || raw == "" => {}
+        | raw.typeof() == "String" => raw.decode().defaultsTo({})
+        | raw
+      return {
+        "blob": trimImportAttr(pkg{"blob"}),
+        "secret": trimImportAttr(pkg{"secret"}),
+        "name": trimImportAttr(pkg{"name"}),
+        "donorQueryEci": trimImportAttr(pkg{"donorQueryEci"}),
+        "renewIngress": pkg{"renewIngress"}.isnull()
+          => true
+          | pkg{"renewIngress"}
+      }
+    }
+
+    importFieldsFromEvent = function() {
+      pkgRaw = event:attr("export_package")
+      pkgRaw.isnull() == false && pkgRaw != "" => parseExportPackage(pkgRaw) |
+      {
+        "blob": trimImportAttr(event:attr("blob")),
+        "secret": trimImportAttr(event:attr("secret")),
+        "name": trimImportAttr(event:attr("name")),
+        "donorQueryEci": trimImportAttr(event:attr("donorQueryEci")),
+        "renewIngress": event:attr("renewIngress").defaultsTo(true)
+      }
     }
 
     thingRulesetUrl = function() {
@@ -194,19 +224,22 @@ ruleset io.picolabs.manifold_portable_thing {
      * Manifold name and its donor query channel. Read-only; the thing is untouched.
      * @param subtreeRootPicoId String "any channel ECI on the thing, its family ECI, or its pico id"
      * @param secret String "encryption secret; the importer needs the same one"
-     * @returns Map "{ blob, name, donorQueryEci, subtreeRootPicoId, thingFamilyPicoID }"
+     * @returns Map "{ blob, name, donorQueryEci, export_package, subtreeRootPicoId, thingFamilyPicoID }"
      * @example "export" { "subtreeRootPicoId": "<thing eci>", "secret": "<secret>" }
      */
     exportPortableThing = function(subtreeRootPicoId, secret) {
       blob = portable_subtree:exportSubtree(subtreeRootPicoId, secret)
       hints = thingExportHints(subtreeRootPicoId)
-      return {
+      export_package = {
         "blob": blob,
+        "name": hints{"name"},
+        "donorQueryEci": hints{"donorQueryEci"},
         "subtreeRootPicoId": subtreeRootPicoId,
         "thingFamilyPicoID": hints{"thingFamilyPicoID"},
-        "name": hints{"name"},
-        "donorQueryEci": hints{"donorQueryEci"}
+        "renewIngress": true
       }
+      return export_package
+        .put("export_package", export_package)
     }
 
     /**
@@ -224,29 +257,29 @@ ruleset io.picolabs.manifold_portable_thing {
    * pico: restores the subtree, installs io.picolabs.thing, subscribes it to
    * Manifold, and adds it to the registry under name. Raises
    * manifold:import_portable_thing_done with the result (also in lastImport()).
-   * @attr blob String "from exportPortableThing"
-   * @attr secret String "the secret used to export it"
-   * @attr name String optional "the thing's Manifold name (from the export)"
-   * @attr donorQueryEci String optional "from the export; maps to the thing's new query channel"
-   * @attr renewIngress Boolean optional "mint fresh DIDComm ingress (default true)"
-   * @example "import" { "blob": "<blob>", "secret": "<secret>", "name": "<name>", "donorQueryEci": "<eci>" }
+   * @attr export_package Map "exportPortableThing result as JSON; add secret before import"
+   * @example "import" { "export_package": { "blob": "<blob>", "secret": "<secret>", "name": "<name>", "donorQueryEci": "<eci>", "renewIngress": true } }
    */
   rule import_portable_thing {
     select when manifold import_portable_thing
-      blob re#.+#
-      secret re#.+#
+    pre {
+      imp = importFieldsFromEvent()
+    }
+    if imp{"blob"} && imp{"secret"} then noop()
     fired {
       ent:pendingImport := {
-        "name": trimImportAttr(event:attr("name")),
-        "donorQueryEci": trimImportAttr(event:attr("donorQueryEci"))
+        "name": imp{"name"},
+        "donorQueryEci": imp{"donorQueryEci"}
       }
       raise portable_subtree event "import"
         attributes {
-          "blob": event:attr("blob"),
-          "secret": event:attr("secret"),
-          "renewIngress": event:attr("renewIngress").defaultsTo(true),
-          "bootstrapDisplayName": trimImportAttr(event:attr("name"))
+          "blob": imp{"blob"},
+          "secret": imp{"secret"},
+          "renewIngress": imp{"renewIngress"},
+          "bootstrapDisplayName": imp{"name"}
         }
+    } else {
+      error warn <<import_portable_thing: export_package (or blob+secret) must include blob and secret>>
     }
   }
 

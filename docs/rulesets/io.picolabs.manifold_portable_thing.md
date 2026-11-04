@@ -14,14 +14,16 @@ raise manifold event "enable_portable_thing"
 
 Export (query on Manifold app channel):  
 manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)  
-→ { blob, name, donorQueryEci, subtreeRootPicoId, thingFamilyPicoID }  
+→ { blob, name, donorQueryEci, export_package, … }  
+Copy export_package (or the whole result), add "secret", paste as import export_package.  
 name is the Manifold thing label (ent:things). subtreeRootPicoId may be any channel  
 ECI on the thing (including the About tab UI ECI), family ECI, or internal pico id.  
 Secret is input only — not echoed.
 
 Import (event on Manifold app channel):  
-raise manifold event "import_portable_thing"  
-attributes { "blob", "secret", "name", "donorQueryEci", "renewIngress" }  
+Copy exportPortableThing JSON, add "secret": "<same secret used at export>",  
+then raise manifold event "import_portable_thing"  
+attributes { "export_package": <that object> }  
 → import_portable_thing_done (+ thingQueryEci when donorQueryEci is set)
 
 *Version draft. Generated from the ruleset's annotations by `krl-schema --format markdown`; edit the `/** */` comments in the source, not this page. Only annotated rules and shared functions appear.*
@@ -37,22 +39,23 @@ Events you can send to a pico with this ruleset installed. Whether an operation 
 
 Import a thing exported with exportPortableThing as a child of this Manifold pico: restores the subtree, installs io.picolabs.thing, subscribes it to Manifold, and adds it to the registry under name. Raises manifold:import_portable_thing_done with the result (also in lastImport()).
 
-**Send:** `manifold:import_portable_thing` with `blob` matches `re#.+#` and `secret` matches `re#.+#`  
+**Send:** `manifold:import_portable_thing`  
 **Rule:** `import_portable_thing`
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `blob` | String | yes | from exportPortableThing |
-| `secret` | String | yes | the secret used to export it |
-| `name` | String | no | the thing's Manifold name (from the export) |
-| `donorQueryEci` | String | no | from the export; maps to the thing's new query channel |
-| `renewIngress` | Boolean | no | mint fresh DIDComm ingress (default true) |
+| `export_package` | Map | yes | exportPortableThing result as JSON; add secret before import |
+| `blob` | Any | no |  |
+| `secret` | Any | no |  |
+| `name` | Any | no |  |
+| `donorQueryEci` | Any | no |  |
+| `renewIngress` | Any | no |  |
 
 **Examples:**
 
-- **import:** `{"blob":"<blob>","secret":"<secret>","name":"<name>","donorQueryEci":"<eci>"}`
+- **import:** `{"export_package":{"blob":"<blob>","secret":"<secret>","name":"<name>","donorQueryEci":"<eci>","renewIngress":true}}`
 
-**Acts when:** always, once selected
+**Acts when:** `imp{"blob"} && imp{"secret"}`
 
 **May emit** (possible, not guaranteed):
 
@@ -62,8 +65,6 @@ Import a thing exported with exportPortableThing as a child of this Manifold pic
 
 ```krl
 select when manifold import_portable_thing
-        blob re#.+#
-        secret re#.+#
 ```
 
 </details>
