@@ -15,15 +15,16 @@ raise manifold event "enable_portable_thing"
 Export (query on Manifold app channel):  
 manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)  
 → { blob, name, donorQueryEci, export_package, … }  
-Copy export_package (or the whole result), add "secret", paste as import export_package.  
+Copy export_package or the whole query result as-is (secret is never in the JSON).  
 name is the Manifold thing label (ent:things). subtreeRootPicoId may be any channel  
-ECI on the thing (including the About tab UI ECI), family ECI, or internal pico id.  
-Secret is input only — not echoed.
+ECI on the thing (including the About tab UI ECI), family ECI, or internal pico id.
 
 Import (event on Manifold app channel):  
-Copy exportPortableThing JSON, add "secret": "<same secret used at export>",  
-then raise manifold event "import_portable_thing"  
-attributes { "export_package": <that object> }  
+raise manifold event "import_portable_thing"  
+attributes {  
+"export_package": <paste exportPortableThing JSON>,  
+"secret": "<same secret used at export>"  
+}  
 → import_portable_thing_done (+ thingQueryEci when donorQueryEci is set)
 
 *Version draft. Generated from the ruleset's annotations by `krl-schema --format markdown`; edit the `/** */` comments in the source, not this page. Only annotated rules and shared functions appear.*
@@ -44,16 +45,16 @@ Import a thing exported with exportPortableThing as a child of this Manifold pic
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `export_package` | Map | yes | exportPortableThing result as JSON; add secret before import |
+| `export_package` | Map | yes | paste exportPortableThing JSON unchanged (map or JSON string) |
+| `secret` | String | yes | encryption secret used at export (not stored in export JSON) |
 | `blob` | Any | no |  |
-| `secret` | Any | no |  |
 | `name` | Any | no |  |
 | `donorQueryEci` | Any | no |  |
 | `renewIngress` | Any | no |  |
 
 **Examples:**
 
-- **import:** `{"export_package":{"blob":"<blob>","secret":"<secret>","name":"<name>","donorQueryEci":"<eci>","renewIngress":true}}`
+- **import:** `{"export_package":{"blob":"<blob>","name":"<name>","donorQueryEci":"<eci>"},"secret":"<secret>"}`
 
 **Acts when:** `imp{"blob"} && imp{"secret"}`
 

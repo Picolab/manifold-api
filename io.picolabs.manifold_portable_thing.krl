@@ -17,15 +17,16 @@ ruleset io.picolabs.manifold_portable_thing {
       Export (query on Manifold app channel):
         manifold_portable_thing:exportPortableThing(subtreeRootPicoId, secret)
         → { blob, name, donorQueryEci, export_package, … }
-        Copy export_package (or the whole result), add "secret", paste as import export_package.
+        Copy export_package or the whole query result as-is (secret is never in the JSON).
         name is the Manifold thing label (ent:things). subtreeRootPicoId may be any channel
         ECI on the thing (including the About tab UI ECI), family ECI, or internal pico id.
-        Secret is input only — not echoed.
 
       Import (event on Manifold app channel):
-        Copy exportPortableThing JSON, add "secret": "<same secret used at export>",
-        then raise manifold event "import_portable_thing"
-          attributes { "export_package": <that object> }
+        raise manifold event "import_portable_thing"
+          attributes {
+            "export_package": <paste exportPortableThing JSON>,
+            "secret": "<same secret used at export>"
+          }
         → import_portable_thing_done (+ thingQueryEci when donorQueryEci is set)
     >>
     author "PICOLABS"
@@ -56,28 +57,36 @@ ruleset io.picolabs.manifold_portable_thing {
           )
     }
 
-    /** Map or JSON string from UI paste (exportPortableThing result + secret). */
+    exportPackageBody = function(pkg) {
+      nested = pkg{"export_package"}
+      nested.isnull() == false && nested != "" => (
+        nested.typeof() == "String" => nested.decode().defaultsTo({}) | nested
+      ) | pkg
+    }
+
+    /** Map or JSON string from UI paste (exportPortableThing result; no secret in JSON). */
     parseExportPackage = function(raw) {
       pkg = raw.isnull() || raw == "" => {}
         | raw.typeof() == "String" => raw.decode().defaultsTo({})
         | raw
+      inner = exportPackageBody(pkg)
       return {
-        "blob": trimImportAttr(pkg{"blob"}),
-        "secret": trimImportAttr(pkg{"secret"}),
-        "name": trimImportAttr(pkg{"name"}),
-        "donorQueryEci": trimImportAttr(pkg{"donorQueryEci"}),
-        "renewIngress": pkg{"renewIngress"}.isnull()
+        "blob": trimImportAttr(inner{"blob"}),
+        "name": trimImportAttr(inner{"name"}),
+        "donorQueryEci": trimImportAttr(inner{"donorQueryEci"}),
+        "renewIngress": inner{"renewIngress"}.isnull()
           => true
-          | pkg{"renewIngress"}
+          | inner{"renewIngress"}
       }
     }
 
     importFieldsFromEvent = function() {
+      secret = trimImportAttr(event:attr("secret"))
       pkgRaw = event:attr("export_package")
-      pkgRaw.isnull() == false && pkgRaw != "" => parseExportPackage(pkgRaw) |
+      pkgRaw.isnull() == false && pkgRaw != "" => parseExportPackage(pkgRaw).put("secret", secret) |
       {
         "blob": trimImportAttr(event:attr("blob")),
-        "secret": trimImportAttr(event:attr("secret")),
+        "secret": secret,
         "name": trimImportAttr(event:attr("name")),
         "donorQueryEci": trimImportAttr(event:attr("donorQueryEci")),
         "renewIngress": event:attr("renewIngress").defaultsTo(true)
@@ -257,8 +266,9 @@ ruleset io.picolabs.manifold_portable_thing {
    * pico: restores the subtree, installs io.picolabs.thing, subscribes it to
    * Manifold, and adds it to the registry under name. Raises
    * manifold:import_portable_thing_done with the result (also in lastImport()).
-   * @attr export_package Map "exportPortableThing result as JSON; add secret before import"
-   * @example "import" { "export_package": { "blob": "<blob>", "secret": "<secret>", "name": "<name>", "donorQueryEci": "<eci>", "renewIngress": true } }
+   * @attr export_package Map "paste exportPortableThing JSON unchanged (map or JSON string)"
+   * @attr secret String "encryption secret used at export (not stored in export JSON)"
+   * @example "import" { "export_package": { "blob": "<blob>", "name": "<name>", "donorQueryEci": "<eci>" }, "secret": "<secret>" }
    */
   rule import_portable_thing {
     select when manifold import_portable_thing
@@ -279,7 +289,7 @@ ruleset io.picolabs.manifold_portable_thing {
           "bootstrapDisplayName": imp{"name"}
         }
     } else {
-      error warn <<import_portable_thing: export_package (or blob+secret) must include blob and secret>>
+      error warn <<import_portable_thing: need export_package with blob and a separate secret attr>>
     }
   }
 
